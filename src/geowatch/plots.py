@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
+import matplotlib.transforms as mtransforms
 import numpy as np
 import pandas as pd
 
-# Reference palette (validated categorical slots 1-2) and recessive ink
+# Reference palette (validated categorical slots 1-3) and recessive ink
 SERIES = "#2a78d6"
 MANOEUVRE = "#eb6834"
+DETECTION = "#1baf7a"
 TEXT = "#0b0b0b"
 TEXT_SECONDARY = "#52514e"
 GRID = "#e4e3df"
@@ -33,17 +35,27 @@ def quicklook(
     elements: pd.DataFrame,
     title: str,
     manoeuvres: pd.DatetimeIndex | None = None,
+    detections: pd.DataFrame | None = None,
     start: str | None = None,
     end: str | None = None,
+    geo_only: bool = True,
 ) -> plt.Figure:
-    """Longitude, drift rate and inclination vs time, with optional ground-truth manoeuvres."""
+    """Longitude, drift rate and inclination vs time.
+
+    Optional overlays: ground-truth manoeuvres (vertical lines) and detected manoeuvres
+    (triangles along the top of each panel). With ``geo_only`` the launch and transfer-orbit
+    element sets (mean motion outside 0.9-1.1 rev/day) are left out.
+    """
     df = elements
+    if geo_only:
+        df = df[(df["n_rev_day"] > 0.9) & (df["n_rev_day"] < 1.1)]
     if start:
         df = df[df["epoch"] >= pd.Timestamp(start)]
     if end:
         df = df[df["epoch"] <= pd.Timestamp(end)]
     if df.empty:
         raise ValueError("No element sets in the selected time window.")
+    t0, t1 = df["epoch"].min(), df["epoch"].max()
 
     fig, axes = plt.subplots(
         len(PANELS), 1, figsize=(11, 7.5), sharex=True, facecolor=SURFACE, layout="constrained"
@@ -52,8 +64,7 @@ def quicklook(
         y = _break_wraps(df[column]) if column == "lon_deg" else df[column].to_numpy()
         ax.plot(df["epoch"], y, color=SERIES, lw=1.4, marker="o", ms=1.8, label="TLE mean elements")
         if manoeuvres is not None:
-            in_window = (manoeuvres >= df["epoch"].min()) & (manoeuvres <= df["epoch"].max())
-            shown = manoeuvres[in_window]
+            shown = manoeuvres[(manoeuvres >= t0) & (manoeuvres <= t1)]
             for i, t in enumerate(shown):
                 ax.axvline(
                     t,
@@ -62,6 +73,22 @@ def quicklook(
                     alpha=0.7,
                     label="Ground-truth manoeuvre" if i == 0 else None,
                 )
+        if detections is not None and len(detections):
+            shown = detections[(detections["t_est"] >= t0) & (detections["t_est"] <= t1)]
+            top = mtransforms.blended_transform_factory(ax.transData, ax.transAxes)
+            ax.plot(
+                shown["t_est"],
+                np.full(len(shown), 0.97),
+                linestyle="none",
+                marker="v",
+                ms=7,
+                color=DETECTION,
+                markeredgecolor=SURFACE,
+                markeredgewidth=0.8,
+                transform=top,
+                clip_on=False,
+                label="Detected manoeuvre",
+            )
         ax.set_ylabel(label, color=TEXT_SECONDARY)
         ax.set_facecolor(SURFACE)
         ax.grid(True, color=GRID, lw=0.6)
@@ -72,11 +99,11 @@ def quicklook(
             ax.spines[side].set_color(GRID)
 
     axes[0].set_title(title, loc="left", color=TEXT, fontsize=12)
-    if manoeuvres is not None:
+    if manoeuvres is not None or detections is not None:
         axes[0].legend(
             loc="lower right",
             bbox_to_anchor=(1.0, 1.0),
-            ncol=2,
+            ncol=3,
             frameon=False,
             fontsize=9,
             labelcolor=TEXT_SECONDARY,

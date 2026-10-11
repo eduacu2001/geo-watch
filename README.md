@@ -9,14 +9,15 @@ reconstructs that activity from the public TLE catalogue: it detects when a sate
 manoeuvres, estimates the Δv, and flags close approaches between objects - and it measures how
 reliable those detections are against satellites whose real manoeuvre history is known.
 
-> Status: **phase 1 - data pipeline** (work in progress)
+> Status: **phase 2 - manoeuvre detection** (work in progress)
 
 ## Roadmap
 
 | Phase | Content | Status |
 |---|---|---|
-| 1 | Space-Track download with local cache, mean elements, GEO longitude and drift rate, quick-look plots | in progress |
-| 2 | Manoeuvre detection (robust statistics → prediction residuals → EKF innovation test), Δv estimation and classification, validation against ground truth | planned |
+| 1 | Space-Track download with local cache, mean elements, GEO longitude and drift rate, quick-look plots | done |
+| 2a | Manoeuvre detection with robust change detection, Δv estimate and classification, validation against ground truth | done |
+| 2b | Model-based detection: prediction residuals and EKF innovation test, compared with 2a on the same benchmark | next |
 | 3 | Proximity-operation detection (RIC relative motion, TLE uncertainty bands) | planned |
 | 4 | Case studies: Luch/Olymp-K, Luch/Olymp 2, SJ-21 & Beidou-2 G2, SJ-21 & SJ-25 | planned |
 | 5 | Interactive website with daily automatic update (GitHub Actions) | planned |
@@ -46,10 +47,57 @@ python scripts/quicklook.py --norad 40258  # plot Luch (Olymp-K)
 python scripts/quicklook.py --benchmark Fengyun-2F --start 2019-01-01 --end 2020-07-01
 python scripts/find_object.py "INTELSAT 9" # look up IDs to add to the catalogue
 python scripts/download_geo_snapshot.py    # current state of the whole GEO belt
+python scripts/validate_detector.py        # score the detector against the ground truth
+python scripts/detect_manoeuvres.py --plot # manoeuvre catalogue for every tracked object
 ```
 
 `download_history.py` is incremental: later runs only request element sets newer than those
 already stored in `data/raw/gp_history/`, which keeps well inside Space-Track's usage limits.
+
+## Manoeuvre detection: method and validation
+
+`src/geowatch/detection.py` finds manoeuvres in the series of mean elements without any orbit
+model:
+
+1. **Signals.** East-west burns change the semi-major axis, seen as a step in the longitude
+   drift rate; north-south burns change the inclination vector.
+2. **Bad-TLE rejection.** Element sets that disagree with both neighbours, while the
+   neighbours agree with each other, are removed first.
+3. **Two-window jump.** At each gap between element sets, lines are fitted to the 6 sets
+   before and the 6 after; the jump is their difference at the gap. Natural evolution is
+   linear over a few days and cancels out; a burn does not.
+4. **Robust significance.** Each jump is divided by the local noise of the jump series
+   (rolling median absolute deviation). Detections need more than 8 robust standard
+   deviations and at least 0.01 deg/day (~3 cm/s) or 0.03 deg (~1.6 m/s).
+5. **Δv and type.** Δv ≈ 2.84 m/s per deg/day of drift change (tangential burn) and
+   v·Δi for plane changes; each event is labelled station-keeping, drift start/stop/change or
+   north-south.
+
+**Validation** against the ground truth of five Fengyun satellites (2011-2022), with the
+matching rules spelled out in `src/geowatch/validation.py`:
+
+| Satellite | Labelled manoeuvres | Found | Unmatched detections | Precision | Recall |
+|---|---|---|---|---|---|
+| Fengyun-2D | 22 | 19 | 2 | 0.90 | 0.86 |
+| Fengyun-2E | 48 | 47 | 4 | 0.92 | 0.98 |
+| Fengyun-2F | 66 | 64 | 11 | 0.85 | 0.97 |
+| Fengyun-2H | 12 | 11 | 1 | 0.92 | 0.92 |
+| Fengyun-4A | 45 | 42 | 11 | 0.79 | 0.93 |
+| **Total** | **193** | **183** | **29** | **0.86** | **0.95** |
+
+What the numbers hide:
+
+- **TLEs react late.** Detections come a median 0.7 days after the real burn (90th percentile
+  2.2 days), because the catalogue's orbit fits need several post-burn observations. The
+  matching window therefore accepts detections up to 4 days late but only 1 day early.
+- **The ground truth is incomplete.** 21 of the 29 unmatched detections are more than a week
+  from any labelled manoeuvre and as large as the labelled ones - for example a 0.4°
+  inclination change on Fengyun-4A on 2020-09-23, clearly visible in the data. Precision is
+  therefore a lower bound. Of the other 8: 3 are labelled burns detected 4.6-5.8 days late
+  (after gaps in the TLE record), 2 come 1.7 days before a labelled burn, and 3 are small
+  steps (below 0.02 deg/day) that may be genuine false alarms.
+- **Parameters were chosen on the same five satellites** (window 6, threshold 8). Results
+  change little between thresholds 6 and 12, but an independent test set would be better.
 
 ## Method notes
 
@@ -73,6 +121,8 @@ src/geowatch/
     spacetrack_io.py      Space-Track queries and local Parquet cache
     elements.py           mean elements, GEO longitude, drift rate, e/i vectors
     benchmark.py          ground-truth manoeuvre dataset
+    detection.py          manoeuvre detection, delta-v and classification
+    validation.py         matching detections to ground truth
     plots.py              quick-look figures
 scripts/                  command-line entry points
 tests/                    pytest suite (no network needed)
