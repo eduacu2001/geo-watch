@@ -1,0 +1,16 @@
+# Credentials - never commit
+.env
+
+# Downloaded and generated data (Space-Track terms restrict redistributing raw data)
+data/
+figures/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/

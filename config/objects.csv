@@ -1,0 +1,21 @@
+# Objects tracked by the project. Lines starting with '#' are ignored.
+# role: inspector | target | validation
+# Run scripts/check_catalog.py to confirm every ID against the official Space-Track catalogue.
+norad_id,name,role,group,regime,notes
+40258,Luch (Olymp-K),inspector,luch,GEO,Russian; a decade of parking next to Western GEO comsats; raised above GEO in Oct 2025
+55841,Luch (Olymp) 2,inspector,luch,GEO,Russian; launched Mar 2023; approached several GEO satellites
+49330,SJ-21,inspector,sj,GEO,Chinese servicing satellite; towed Beidou-2 G2 to graveyard orbit in Jan 2022
+62485,SJ-25,inspector,sj,GEO,Chinese servicing satellite; launched Jan 2025; docked with SJ-21 mid-2025
+34779,Beidou-2 G2,target,sj,GEO,Dead Beidou satellite towed by SJ-21
+29640,Fengyun-2D,validation,benchmark,GEO,Ground-truth manoeuvres 2011-2015 (Shorten et al.)
+33463,Fengyun-2E,validation,benchmark,GEO,Ground-truth manoeuvres 2011-2018 (Shorten et al.)
+38049,Fengyun-2F,validation,benchmark,GEO,Ground-truth manoeuvres 2012-2022 (Shorten et al.)
+43491,Fengyun-2H,validation,benchmark,GEO,Ground-truth manoeuvres 2019-2022 (Shorten et al.)
+41882,Fengyun-4A,validation,benchmark,GEO,Ground-truth manoeuvres 2018-2022 (Shorten et al.)
+# LEO validation satellites (phase 2) - uncomment when moving to LEO
+#41240,Jason-3,validation,benchmark,LEO,Ground-truth manoeuvres 2016-2022 (Shorten et al.)
+#41335,Sentinel-3A,validation,benchmark,LEO,Ground-truth manoeuvres 2016-2022 (Shorten et al.)
+#43437,Sentinel-3B,validation,benchmark,LEO,Ground-truth manoeuvres 2018-2022 (Shorten et al.)
+#46984,Sentinel-6A,validation,benchmark,LEO,Ground-truth manoeuvres 2020-2022 (Shorten et al.)
+#36508,CryoSat-2,validation,benchmark,LEO,Ground-truth manoeuvres 2010-2022 (Shorten et al.)
+#39086,SARAL,validation,benchmark,LEO,Ground-truth manoeuvres 2013-2022 (Shorten et al.)
