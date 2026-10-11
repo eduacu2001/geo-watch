@@ -36,7 +36,7 @@ raised about 330 km above GEO, where it now drifts west at 4.2°/day.
 |---|---|---|
 | 1 | Space-Track download with local cache, mean elements, GEO longitude and drift rate, quick-look plots | done |
 | 2a | Manoeuvre detection with robust change detection, Δv estimate and classification, validation against ground truth | done |
-| 2b | Model-based detection: prediction residuals and EKF innovation test, compared with 2a on the same benchmark | next |
+| 2b | Model-based detection: extended Kalman filter on the J22 longitude dynamics + NIS test, compared with 2a on the same benchmark | in progress |
 | 3 | Proximity-operation detection (RIC relative motion, TLE uncertainty bands) | planned |
 | 4 | Case studies: Luch/Olymp-K, Luch/Olymp 2, SJ-21 & Beidou-2 G2, SJ-21 & SJ-25 | planned |
 | 5 | Interactive website with daily automatic update (GitHub Actions) | planned |
@@ -68,6 +68,7 @@ python scripts/find_object.py "INTELSAT 9" # look up IDs to add to the catalogue
 python scripts/download_geo_snapshot.py    # current state of the whole GEO belt
 python scripts/validate_detector.py        # score the detector against the ground truth
 python scripts/detect_manoeuvres.py --plot # manoeuvre catalogue for every tracked object
+python scripts/compare_detectors.py        # phase 2a vs phase 2b on the same ground truth
 ```
 
 `download_history.py` is incremental: later runs only request element sets newer than those
@@ -142,7 +143,8 @@ src/geowatch/
     spacetrack_io.py      Space-Track queries and local Parquet cache
     elements.py           mean elements, GEO longitude, drift rate, e/i vectors
     benchmark.py          ground-truth manoeuvre dataset
-    detection.py          manoeuvre detection, delta-v and classification
+    detection.py          manoeuvre detection, delta-v and classification (phase 2a)
+    kalman.py             Kalman-filter manoeuvre detection (phase 2b)
     validation.py         matching detections to ground truth
     plots.py              quick-look figures
 scripts/                  command-line entry points
