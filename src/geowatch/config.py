@@ -19,14 +19,36 @@ FIGURES_DIR = PROJECT_ROOT / "figures"
 CATALOG_FILE = PROJECT_ROOT / "config" / "objects.csv"
 
 
-def spacetrack_credentials() -> tuple[str, str]:
-    """Read the Space-Track login from the .env file (or environment variables)."""
-    load_dotenv(PROJECT_ROOT / ".env")
+EXAMPLE_IDENTITY = "your_email@example.com"
+EXAMPLE_PASSWORD = "your_password"
+
+
+def spacetrack_credentials(env_file: Path | None = None) -> tuple[str, str]:
+    """Read the Space-Track login from the .env file (or environment variables).
+
+    Raises a RuntimeError that says exactly what is wrong: no .env file, a missing
+    variable, or a .env that still holds the example values.
+    """
+    env_file = env_file or PROJECT_ROOT / ".env"
+    load_dotenv(env_file)
     identity = os.getenv("SPACETRACK_IDENTITY")
     password = os.getenv("SPACETRACK_PASSWORD")
-    if not identity or not password or identity == "your_email@example.com":
+
+    if not identity and not password and not env_file.exists():
+        hint = ""
+        if env_file.with_name(".env.txt").exists():
+            hint = " Found '.env.txt' instead: rename it to '.env' (Windows hides the .txt)."
         raise RuntimeError(
-            "Space-Track credentials not found. Copy '.env.example' to '.env' in the "
-            "project root and fill in SPACETRACK_IDENTITY and SPACETRACK_PASSWORD."
+            f"No .env file in {env_file.parent}. Copy '.env.example' to '.env' and fill in "
+            f"your Space-Track login.{hint}"
+        )
+    if not identity or not password:
+        raise RuntimeError(
+            f"{env_file} must define both SPACETRACK_IDENTITY and SPACETRACK_PASSWORD."
+        )
+    if identity == EXAMPLE_IDENTITY or password == EXAMPLE_PASSWORD:
+        raise RuntimeError(
+            f"{env_file} still contains the example values. Open it, replace them with your "
+            "Space-Track email and password, and save the file."
         )
     return identity, password
