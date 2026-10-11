@@ -1,5 +1,7 @@
 # GEO Watch
 
+[![tests](https://github.com/eduacu2001/geo-watch/actions/workflows/tests.yml/badge.svg)](https://github.com/eduacu2001/geo-watch/actions/workflows/tests.yml)
+
 **Detecting manoeuvres and proximity operations of geostationary satellites from public orbital data.**
 
 Some satellites in geostationary orbit do more than relay TV: Russia's Luch/Olymp spacecraft
@@ -10,6 +12,23 @@ manoeuvres, estimates the Δv, and flags close approaches between objects - and 
 reliable those detections are against satellites whose real manoeuvre history is known.
 
 > Status: **phase 2 - manoeuvre detection** (work in progress)
+
+## What public data already shows
+
+**SJ-21 meets SJ-25 (2025).** SJ-21 spends the first five months of 2025 drifting west from
+149°E, then hops to 127.5°E in early June; SJ-25 moves there from 120°E a few days later. In
+mid-August the inclination of both objects drops from 10.6° to 4.4° within a week - a plane
+change of about 6°, of the order of 300 m/s, made while the two were reported to be docked.
+
+![SJ-21 in 2025: longitude, drift rate and inclination with detected manoeuvres](docs/img/sj21_2025.png)
+
+**Luch/Olymp-K (2014-2026).** Each step in longitude is a relocation to a new slot in the GEO
+belt (phase 3 will identify which satellites it parked next to). The last north-south
+manoeuvre detected is in November 2023; from early 2024 the inclination grows freely
+(~0.9°/year), a common way to save fuel late in a mission. In October 2025 the satellite was
+raised about 330 km above GEO, where it now drifts west at 4.2°/day.
+
+![Luch/Olymp-K 2014-2026 with detected manoeuvres](docs/img/luch_olymp_k.png)
 
 ## Roadmap
 
@@ -85,6 +104,8 @@ matching rules spelled out in `src/geowatch/validation.py`:
 | Fengyun-4A | 45 | 42 | 11 | 0.79 | 0.93 |
 | **Total** | **193** | **183** | **29** | **0.86** | **0.95** |
 
+![Fengyun-4A 2019-2020: ground-truth manoeuvres (orange) and detections (green)](docs/img/validation_fengyun-4a.png)
+
 What the numbers hide:
 
 - **TLEs react late.** Detections come a median 0.7 days after the real burn (90th percentile
@@ -126,6 +147,7 @@ src/geowatch/
     plots.py              quick-look figures
 scripts/                  command-line entry points
 tests/                    pytest suite (no network needed)
+docs/img/                 figures used in this README (derived results only)
 data/, figures/           generated locally, not committed
 ```
 
