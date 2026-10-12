@@ -11,7 +11,7 @@ reconstructs that activity from the public TLE catalogue: it detects when a sate
 manoeuvres, estimates the Δv, and flags close approaches between objects - and it measures how
 reliable those detections are against satellites whose real manoeuvre history is known.
 
-> Status: **phase 2 - manoeuvre detection** (work in progress)
+> Status: **phase 2 done** - next: proximity operations (phase 3)
 
 ## What public data already shows
 
@@ -36,7 +36,7 @@ raised about 330 km above GEO, where it now drifts west at 4.2°/day.
 |---|---|---|
 | 1 | Space-Track download with local cache, mean elements, GEO longitude and drift rate, quick-look plots | done |
 | 2a | Manoeuvre detection with robust change detection, Δv estimate and classification, validation against ground truth | done |
-| 2b | Model-based detection: prediction residuals and EKF innovation test, compared with 2a on the same benchmark | next |
+| 2b | Model-based detection: extended Kalman filter on the J22 longitude dynamics + NIS test, compared with 2a on the same benchmark | done |
 | 3 | Proximity-operation detection (RIC relative motion, TLE uncertainty bands) | planned |
 | 4 | Case studies: Luch/Olymp-K, Luch/Olymp 2, SJ-21 & Beidou-2 G2, SJ-21 & SJ-25 | planned |
 | 5 | Interactive website with daily automatic update (GitHub Actions) | planned |
@@ -68,6 +68,7 @@ python scripts/find_object.py "INTELSAT 9" # look up IDs to add to the catalogue
 python scripts/download_geo_snapshot.py    # current state of the whole GEO belt
 python scripts/validate_detector.py        # score the detector against the ground truth
 python scripts/detect_manoeuvres.py --plot # manoeuvre catalogue for every tracked object
+python scripts/compare_detectors.py        # phase 2a vs phase 2b on the same ground truth
 ```
 
 `download_history.py` is incremental: later runs only request element sets newer than those
@@ -120,6 +121,42 @@ What the numbers hide:
 - **Parameters were chosen on the same five satellites** (window 6, threshold 8). Results
   change little between thresholds 6 and 12, but an independent test set would be better.
 
+## Phase 2b: Kalman-filter detector
+
+`src/geowatch/kalman.py` replaces the statistics of phase 2a with a dynamical model:
+
+- **East-west: extended Kalman filter.** State [longitude, drift, bias]. The drift changes
+  under the J22 tesseral harmonic, a(λ) = −K sin 2(λ − 75.07°), which pulls GEO satellites
+  towards 75°E and 105°W; the bias state absorbs what J22 leaves out. The dynamics are
+  non-linear in longitude, so the covariance is propagated with the Jacobian of each
+  integration step.
+- **North-south: linear Kalman filter** on the inclination vector (constant-rate model).
+- **Detection:** the normalised innovation squared (NIS) of each new TLE is tested against a
+  χ² gate (2 dof, false-alarm probability 1e-6). One TLE above the gate is treated as a bad
+  TLE; two in a row are a manoeuvre, and the filter restarts from the new measurement.
+
+Same benchmark, same matching rules (`python scripts/compare_detectors.py`):
+
+| Detector | Found | Unmatched | Precision | Recall | F1 | Median lag |
+|---|---|---|---|---|---|---|
+| 2a two-window statistics | 183 / 193 | 29 | 0.86 | 0.95 | 0.90 | 0.70 days |
+| 2b Kalman filters | 183 / 193 | 40 | 0.82 | 0.95 | 0.88 | 0.65 days |
+
+The filter reacts slightly earlier (it needs two post-burn TLEs instead of a window of six)
+at the cost of a few more alarms. Its mean NIS is 1.7 (east-west) and 1.2 (north-south)
+against an ideal of 2, so it is consistent and slightly conservative.
+
+Two lessons from building it:
+
+- **TLE errors are correlated in time.** Consecutive TLEs come from overlapping orbit
+  determination arcs, so the scatter between them underestimates the real prediction error.
+  The measurement noise is estimated from the data but given physical floors (0.01° in
+  longitude, 0.002°/day in drift); without them the filter fires constantly.
+- **The detectors disagree on Luch/Olymp-K** (110 manoeuvres for 2a, 388 for 2b): its
+  drift jumps by 0.01-0.02°/day every few days, which the filter treats as small burns and
+  the robust statistics treat as noise. Whether these are real micro-manoeuvres is an open
+  question for the case study.
+
 ## Method notes
 
 - **Mean elements, not osculating states.** Following Shorten et al. (2023), orbit changes are
@@ -142,7 +179,8 @@ src/geowatch/
     spacetrack_io.py      Space-Track queries and local Parquet cache
     elements.py           mean elements, GEO longitude, drift rate, e/i vectors
     benchmark.py          ground-truth manoeuvre dataset
-    detection.py          manoeuvre detection, delta-v and classification
+    detection.py          manoeuvre detection, delta-v and classification (phase 2a)
+    kalman.py             Kalman-filter manoeuvre detection (phase 2b)
     validation.py         matching detections to ground truth
     plots.py              quick-look figures
 scripts/                  command-line entry points
