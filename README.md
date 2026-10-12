@@ -11,7 +11,7 @@ reconstructs that activity from the public TLE catalogue: it detects when a sate
 manoeuvres, estimates the Δv, and flags close approaches between objects - and it measures how
 reliable those detections are against satellites whose real manoeuvre history is known.
 
-> Status: **phase 3 - proximity operations** (work in progress)
+> Status: **phases 1-3 done** - next: case studies and the interactive website
 
 ## What public data already shows
 
@@ -37,8 +37,8 @@ raised about 330 km above GEO, where it now drifts west at 4.2°/day.
 | 1 | Space-Track download with local cache, mean elements, GEO longitude and drift rate, quick-look plots | done |
 | 2a | Manoeuvre detection with robust change detection, Δv estimate and classification, validation against ground truth | done |
 | 2b | Model-based detection: extended Kalman filter on the J22 longitude dynamics + NIS test, compared with 2a on the same benchmark | done |
-| 3a | Parking slots of each inspector and the satellites parked next to it | in progress |
-| 3b | Distance and relative motion (RIC frame) against each neighbour, with TLE uncertainty | planned |
+| 3a | Parking slots of each inspector and the satellites parked next to it | done |
+| 3b | Distance and relative motion (RIC frame) against each neighbour, with TLE uncertainty | done |
 | 4 | Case studies: Luch/Olymp-K, Luch/Olymp 2, SJ-21 & Beidou-2 G2, SJ-21 & SJ-25 | planned |
 | 5 | Interactive website with daily automatic update (GitHub Actions) | planned |
 
@@ -70,7 +70,8 @@ python scripts/download_geo_snapshot.py    # current state of the whole GEO belt
 python scripts/validate_detector.py        # score the detector against the ground truth
 python scripts/detect_manoeuvres.py --plot # manoeuvre catalogue for every tracked object
 python scripts/compare_detectors.py        # phase 2a vs phase 2b on the same ground truth
-python scripts/find_neighbours.py --download-targets  # who parked next to whom (phase 3)
+python scripts/find_neighbours.py --download-targets  # who parked next to whom (phase 3a)
+python scripts/analyse_proximity.py --plot-top 6       # distances and RIC motion (phase 3b)
 ```
 
 `download_history.py` is incremental: later runs only request element sets newer than those
@@ -159,6 +160,41 @@ Two lessons from building it:
   the robust statistics treat as noise. Whether these are real micro-manoeuvres is an open
   question for the case study.
 
+## Phase 3a: who parked next to whom
+
+`scripts/find_neighbours.py` finds every period in which an inspector is station-kept at one
+longitude (31 for Luch/Olymp-K between 2014 and 2025, from 24°W to 96°E), downloads the
+whole GEO belt around those dates and lists the objects within 0.5° of longitude.
+
+Every satellite that public analyses name as a Luch/Olymp-K target
+([Kayhan Space](https://kayhan.space/blog/tracking-the-tracker-is-russias-luch-olymp-approaching-the-end-of-its-mission/aid/34))
+turns up among its neighbours, found from the orbital data alone: Intelsat 7, 901 and 905,
+Skynet 4C, Athena-Fidus, Astra 1G, Turksat 4B and SESAT 2. Other neighbours include
+Intelsat 33E, 36, 37E and 39, NSS 12, Eutelsat 28B and Turksat 3A/4A. Luch (Olymp) 2 has
+parked next to Eutelsat KA-SAT, 9B, 3B and Konnect VHTS, Astra 4A, Thor 6 and 7, Intelsat
+10-02 with its MEV-2 servicing vehicle, and Intelsat 39.
+
+## Phase 3b: how close, and where
+
+`scripts/analyse_proximity.py` propagates the inspector and each neighbour with SGP4 over the
+parking period, switching to every new element set as it was published, and expresses the
+inspector's position in the target's RIC frame (radial, in-track, cross-track). The TLE
+position uncertainty, measured from how far each element set's prediction lands from the
+next one, is 1-5 km depending on the object; distances below that are not meaningful.
+
+- **Luch/Olymp-K** spent 31 parking periods within a median 100 km of 28 different
+  satellites. The typical stand-off is about 60 km and almost purely in-track: it sits in
+  the target's own orbit slightly ahead or behind, with mean radial and cross-track offsets
+  below 1 km. For example, from October 2021 to January 2022 it stayed about 35 km behind
+  Intelsat 33E, circling a few km radially and tens of km cross-track every day.
+- **Luch (Olymp) 2** has been within 50 km of Intelsat 39 for 459 of the 582 days since
+  March 2025 (median 36 km), after spending late 2024 about 44 km from Intelsat 10-02 and
+  the MEV-2 vehicle docked to it.
+- **SJ-21 and SJ-25** are a median 0.1 km apart in October-November 2025: they are tracked
+  as one object, consistent with the reported docking.
+
+![Luch/Olymp-K around Intelsat 33E, October 2021 to January 2022](docs/img/luch_intelsat33e.png)
+
 ## Method notes
 
 - **Mean elements, not osculating states.** Following Shorten et al. (2023), orbit changes are
@@ -183,7 +219,8 @@ src/geowatch/
     benchmark.py          ground-truth manoeuvre dataset
     detection.py          manoeuvre detection, delta-v and classification (phase 2a)
     kalman.py             Kalman-filter manoeuvre detection (phase 2b)
-    proximity.py          parking slots and neighbour search (phase 3)
+    proximity.py          parking slots, neighbour search, RIC relative motion (phase 3)
+    ephemeris.py          SGP4 ephemerides from a TLE history and TLE consistency errors
     validation.py         matching detections to ground truth
     plots.py              quick-look figures
 scripts/                  command-line entry points

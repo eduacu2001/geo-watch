@@ -133,3 +133,104 @@ def neighbours_at(
             "drift_deg_day", "inc_deg"]  # fmt: skip
     cols = [c for c in cols if c in near.columns]
     return near.sort_values("arc_km")[cols].reset_index(drop=True)
+
+
+# --------------------------------------------------------------------------------------
+# Phase 3B - distance and relative motion
+# --------------------------------------------------------------------------------------
+
+
+def ric_basis(r, v):
+    """Rotation matrix from the inertial (TEME) frame to the RIC frame of an object.
+
+    Rows: R = r/|r| (radial), I = C x R (in-track), C = (r x v)/|r x v| (cross-track), so
+    that M @ vec gives a vector's radial, in-track and cross-track components. Works for
+    single vectors (3,) -> (3, 3) and for arrays (n, 3) -> (n, 3, 3).
+    """
+    r = np.asarray(r, dtype=float)
+    v = np.asarray(v, dtype=float)
+
+    radial = r / np.linalg.norm(r, axis=-1, keepdims=True)
+    h = np.cross(r, v)
+    cross = h / np.linalg.norm(h, axis=-1, keepdims=True)
+    in_track = np.cross(cross, radial)
+
+    # Stack along the second-to-last axis: rows are R, I, C
+    return np.stack([radial, in_track, cross], axis=-2)
+
+
+def to_ric(r_chaser, r_target, v_target):
+    """Position of the chaser relative to the target, in the target's RIC frame [km].
+
+    Works for single vectors (3,) and for arrays (n, 3), each row with its own rotation.
+    """
+    r_chaser = np.asarray(r_chaser, dtype=float)
+    r_target = np.asarray(r_target, dtype=float)
+    v_target = np.asarray(v_target, dtype=float)
+
+    M = ric_basis(r_target, v_target)  # (3, 3) or (n, 3, 3)
+    rel = r_chaser - r_target  # (3,) or (n, 3)
+
+    # Matrix-vector product that works for both shapes
+    return np.einsum("...ij,...j->...i", M, rel)
+
+
+def relative_motion(
+    chaser_raw: pd.DataFrame,
+    target_raw: pd.DataFrame,
+    start,
+    end,
+    step_hours: float = 1.0,
+) -> pd.DataFrame:
+    """Chaser position relative to the target (target RIC frame) on a regular time grid.
+
+    Both objects are propagated with SGP4 from their latest element set at each time.
+    Columns: time, R_km, I_km, C_km, range_km, and the age of the element sets used.
+    """
+    from geowatch.ephemeris import ephemeris
+
+    times = pd.date_range(
+        pd.Timestamp(start), pd.Timestamp(end), freq=pd.Timedelta(hours=step_hours)
+    )
+    r_c, _, age_c = ephemeris(chaser_raw, times)
+    r_t, v_t, age_t = ephemeris(target_raw, times)
+    ric = to_ric(r_c, r_t, v_t)
+    out = pd.DataFrame(
+        {
+            "time": times,
+            "R_km": ric[:, 0],
+            "I_km": ric[:, 1],
+            "C_km": ric[:, 2],
+            "range_km": np.linalg.norm(r_c - r_t, axis=1),
+            "age_chaser_days": age_c,
+            "age_target_days": age_t,
+        }
+    )
+    return out.dropna(subset=["range_km"]).reset_index(drop=True)
+
+
+def summarize_pair(rel: pd.DataFrame, sigma_km: float = np.nan) -> dict:
+    """Headline numbers of one inspector-target encounter.
+
+    ``sigma_km`` is the combined TLE position uncertainty of the two objects (see
+    ephemeris.tle_consistency); distances are only meaningful down to roughly that level.
+    """
+    if rel.empty:
+        return {}
+    step_days = rel["time"].diff().dt.total_seconds().median() / 86400
+    rng = rel["range_km"]
+    return {
+        "start": rel["time"].iloc[0],
+        "end": rel["time"].iloc[-1],
+        "min_range_km": float(rng.min()),
+        "p10_range_km": float(rng.quantile(0.10)),
+        "median_range_km": float(rng.median()),
+        "max_range_km": float(rng.max()),
+        "time_of_min": rel["time"].iloc[int(rng.to_numpy().argmin())],
+        "mean_R_km": float(rel["R_km"].mean()),
+        "mean_I_km": float(rel["I_km"].mean()),
+        "mean_C_km": float(rel["C_km"].mean()),
+        "days_within_50km": float((rng < 50).sum() * step_days),
+        "days_within_100km": float((rng < 100).sum() * step_days),
+        "sigma_km": float(sigma_km),
+    }
