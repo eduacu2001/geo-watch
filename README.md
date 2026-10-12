@@ -11,7 +11,7 @@ reconstructs that activity from the public TLE catalogue: it detects when a sate
 manoeuvres, estimates the Δv, and flags close approaches between objects - and it measures how
 reliable those detections are against satellites whose real manoeuvre history is known.
 
-> Status: **phase 2 done** - next: proximity operations (phase 3)
+> Status: **phase 3 - proximity operations** (work in progress)
 
 ## What public data already shows
 
@@ -37,7 +37,8 @@ raised about 330 km above GEO, where it now drifts west at 4.2°/day.
 | 1 | Space-Track download with local cache, mean elements, GEO longitude and drift rate, quick-look plots | done |
 | 2a | Manoeuvre detection with robust change detection, Δv estimate and classification, validation against ground truth | done |
 | 2b | Model-based detection: extended Kalman filter on the J22 longitude dynamics + NIS test, compared with 2a on the same benchmark | done |
-| 3 | Proximity-operation detection (RIC relative motion, TLE uncertainty bands) | planned |
+| 3a | Parking slots of each inspector and the satellites parked next to it | in progress |
+| 3b | Distance and relative motion (RIC frame) against each neighbour, with TLE uncertainty | planned |
 | 4 | Case studies: Luch/Olymp-K, Luch/Olymp 2, SJ-21 & Beidou-2 G2, SJ-21 & SJ-25 | planned |
 | 5 | Interactive website with daily automatic update (GitHub Actions) | planned |
 
@@ -69,6 +70,7 @@ python scripts/download_geo_snapshot.py    # current state of the whole GEO belt
 python scripts/validate_detector.py        # score the detector against the ground truth
 python scripts/detect_manoeuvres.py --plot # manoeuvre catalogue for every tracked object
 python scripts/compare_detectors.py        # phase 2a vs phase 2b on the same ground truth
+python scripts/find_neighbours.py --download-targets  # who parked next to whom (phase 3)
 ```
 
 `download_history.py` is incremental: later runs only request element sets newer than those
@@ -181,6 +183,7 @@ src/geowatch/
     benchmark.py          ground-truth manoeuvre dataset
     detection.py          manoeuvre detection, delta-v and classification (phase 2a)
     kalman.py             Kalman-filter manoeuvre detection (phase 2b)
+    proximity.py          parking slots and neighbour search (phase 3)
     validation.py         matching detections to ground truth
     plots.py              quick-look figures
 scripts/                  command-line entry points
