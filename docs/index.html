@@ -1,0 +1,1332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>GEO Watch — Eduardo Acuña</title>
+<meta name="description" content="Which satellites park next to others in geostationary orbit? A Python pipeline that detects the manoeuvres and close approaches of Luch/Olymp, SJ-21 and SJ-25 from public orbital data.">
+<link rel="canonical" href="https://eduacu2001.github.io/geo-watch/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Eduardo Acuña">
+<meta property="og:title" content="Who is parked next to your satellite?">
+<meta property="og:description" content="Twelve years of inspector satellites in geostationary orbit, reconstructed from public data: manoeuvres, parking slots and close approaches.">
+<meta property="og:url" content="https://eduacu2001.github.io/geo-watch/">
+<meta property="og:image" content="https://eduacu2001.github.io/geo-watch/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The geostationary belt seen from above the North Pole, with the path of the Luch/Olymp-K inspector satellite">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Who is parked next to your satellite?">
+<meta name="twitter:description" content="Twelve years of inspector satellites in geostationary orbit, reconstructed from public data: manoeuvres, parking slots and close approaches.">
+<meta name="twitter:image" content="https://eduacu2001.github.io/geo-watch/og.png">
+<meta name="theme-color" content="#070c0e">
+<meta name="author" content="Eduardo Acuña">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+/* Same visual world as the thesis site (eduacu2001.github.io): orbital night, one family
+   of tokens. Roles here: orange = the inspector, blue = the satellite it visits,
+   amber = a detected manoeuvre, white = ground truth. */
+:root{
+  --void:#070c0e; --deep:#0b1214; --panel:#101a1b; --raised:#15211f;
+  --line:#1d2b2a; --line2:#2b3e3b;
+  --ink:#e4ede9; --mid:#a2b5af; --dim:#71857f;
+  --real:#f2f7f5; --base:#4d92ea; --net:#e8672c; --solar:#e9b84c;
+  --display:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --prose:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{background:var(--void);color-scheme:dark}
+body{margin:0;background:var(--void);color:var(--ink);font-family:var(--display);font-size:15px;
+  line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+::selection{background:var(--net);color:var(--void)}
+a{color:inherit}
+img{max-width:100%}
+[hidden]{display:none!important}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:20px}
+
+/* ---------- type ---------- */
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin:0}
+h1{font-weight:800;letter-spacing:-.035em;font-size:clamp(36px,5.6vw,64px);line-height:.98;margin:.3em 0 0;text-wrap:balance}
+h2{font-weight:700;letter-spacing:-.025em;font-size:clamp(25px,3.4vw,36px);line-height:1.1;margin:0;text-wrap:balance}
+h3{font-weight:600;font-size:17px;letter-spacing:-.01em;margin:0}
+.lede{font-family:var(--prose);font-size:clamp(17px,1.9vw,19px);line-height:1.6;color:var(--mid);margin:22px 0 0;max-width:58ch}
+.lede b,.prose b{color:var(--ink);font-weight:600}
+.prose{font-family:var(--prose);font-size:17px;line-height:1.66;color:var(--mid);max-width:64ch;margin:0}
+.prose a,.caption a,.credits a{color:var(--ink);text-decoration-color:var(--line2);text-underline-offset:3px}
+.prose a:hover,.caption a:hover,.credits a:hover{text-decoration-color:var(--net)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* ---------- header ---------- */
+header{padding-block:52px 0;background:radial-gradient(1000px 560px at 78% 34%,#10232a 0%,var(--void) 66%)}
+.hero{display:grid;grid-template-columns:1fr minmax(0,1fr);gap:36px;align-items:center}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+.btn{display:inline-flex;align-items:center;gap:8px;font:600 14px/1 var(--display);padding:12px 18px;border-radius:3px;
+  text-decoration:none;border:1px solid var(--line2);color:var(--ink);background:var(--panel);cursor:pointer;
+  transition:border-color .15s,background .15s}
+.btn:hover{border-color:var(--mid)}
+.btn.primary{background:var(--net);border-color:var(--net);color:#140804}
+.btn.primary:hover{background:#f27a43;border-color:#f27a43}
+.btn.small{font-size:13px;padding:9px 13px}
+.btn:focus-visible{outline:2px solid var(--solar);outline-offset:3px}
+.byline{margin:26px 0 0;font-family:var(--mono);font-size:12px;color:var(--dim);letter-spacing:.03em}
+.byline b{color:var(--mid);font-weight:500}
+
+/* ---------- the ring ---------- */
+.ringBox{display:flex;flex-direction:column;align-items:center;min-width:0}
+#ring{width:100%;max-width:520px;height:auto;display:block;overflow:visible}
+#ring text{font-family:var(--mono);font-size:11px;fill:var(--dim)}
+#ring .lab{font-family:var(--display);font-size:13px;font-weight:600}
+#ring .region{font-family:var(--prose);font-style:italic;font-size:12.5px;fill:#4f625d}
+.ringCtl{display:flex;gap:14px 18px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;width:100%;max-width:520px}
+.hint{font-size:12.5px;color:var(--dim);margin:10px 0 0;text-align:center;max-width:46ch}
+
+/* ---------- controls ---------- */
+.ctl{display:flex;flex-direction:column;gap:7px;min-width:0}
+.ctlLab{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.seg{display:inline-flex;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line2);border-radius:3px;overflow:hidden}
+.seg button{appearance:none;background:none;border:0;border-right:1px solid var(--line2);cursor:pointer;
+  font:500 13px/1 var(--display);color:var(--mid);padding:9px 12px;transition:background .13s,color .13s}
+.seg button:last-child{border-right:0}
+.seg button:hover{background:var(--raised);color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--void)}
+.seg button:focus-visible{outline:2px solid var(--solar);outline-offset:-2px}
+.play{appearance:none;flex:none;width:40px;height:40px;border-radius:50%;border:1px solid var(--line2);
+  background:var(--raised);color:var(--ink);cursor:pointer;display:grid;place-items:center}
+.play:hover{border-color:var(--mid)}
+.play:focus-visible{outline:2px solid var(--solar);outline-offset:3px}
+input[type=range]{appearance:none;-webkit-appearance:none;width:100%;height:4px;background:var(--line2);border-radius:2px;
+  outline:none;cursor:pointer;margin:8px 0}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--solar);
+  border:3px solid var(--void);cursor:pointer}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--solar);border:3px solid var(--void);cursor:pointer}
+input[type=range]:focus-visible{outline:2px solid var(--solar);outline-offset:4px}
+select{appearance:none;-webkit-appearance:none;font:500 13.5px/1.2 var(--display);color:var(--ink);background:var(--panel);
+  border:1px solid var(--line2);border-radius:3px;padding:10px 34px 10px 12px;max-width:100%;cursor:pointer;
+  background-image:linear-gradient(45deg,transparent 50%,var(--mid) 50%),linear-gradient(135deg,var(--mid) 50%,transparent 50%);
+  background-position:calc(100% - 17px) 52%,calc(100% - 12px) 52%;background-size:5px 5px;background-repeat:no-repeat}
+select:focus-visible{outline:2px solid var(--solar);outline-offset:2px}
+select option,select optgroup{background:var(--deep);color:var(--ink)}
+
+/* ---------- readouts ---------- */
+.readout{display:flex;flex-wrap:wrap;gap:14px 30px;margin:0}
+.readout div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.readout .k{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;gap:7px}
+.readout .v{font-family:var(--mono);font-size:17px;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.readout .s{font-size:12px;color:var(--dim)}
+.sw{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none}
+.ringRead{margin:26px 0 0;padding:16px 0;border-top:1px solid var(--line)}
+.ringRead .v{font-size:15px}
+
+/* ---------- key figures ---------- */
+.figures{display:grid;grid-template-columns:repeat(4,1fr);margin-top:6px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.fig{padding:24px 22px 22px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.fig:last-child{border-right:0}
+.fig .lab{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.fig .val{font-family:var(--mono);font-size:30px;font-weight:500;letter-spacing:-.035em;line-height:1;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.fig .val small{font-size:15px;color:var(--dim);letter-spacing:0}
+.fig .sub{font-size:12.5px;color:var(--dim);line-height:1.45}
+
+/* ---------- sections ---------- */
+section{padding-block:80px;border-bottom:1px solid var(--line)}
+.secHead{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px 48px;align-items:end;margin-bottom:30px}
+.secHead .prose{font-size:16.5px}
+.stage{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:20px 20px 14px}
+.stageTop{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:flex-end;justify-content:space-between;margin-bottom:12px}
+.chart{display:block;width:100%;overflow:visible}
+.chart text{font-family:var(--mono);font-size:10.5px;fill:var(--dim)}
+.chart .tl{font-family:var(--display);font-size:12px;fill:var(--mid)}
+.chart .hit{fill:transparent;cursor:pointer}
+.chart .slot{cursor:pointer}
+.chart .slot:focus{outline:none}
+.chart .slot:focus-visible rect{stroke:var(--solar);stroke-width:2}
+.stageRead{margin-top:8px;padding-top:16px;border-top:1px solid var(--line)}
+.tip{position:absolute;pointer-events:none;z-index:5;background:var(--deep);border:1px solid var(--line2);border-radius:3px;
+  padding:10px 12px;min-width:200px;max-width:290px;box-shadow:0 10px 30px rgba(0,0,0,.45);font-size:12.5px;line-height:1.45}
+.tip .t{font-weight:600;color:var(--ink);margin-bottom:6px}
+.tip .r{display:flex;align-items:center;gap:8px;color:var(--mid);font-family:var(--mono);font-size:12px}
+.tip .r b{color:var(--ink);font-weight:500;margin-left:auto;white-space:nowrap}
+.tip .n{color:var(--dim);font-size:11.5px;margin-top:6px}
+.caption{font-size:13px;color:var(--dim);line-height:1.55;max-width:80ch;margin:16px 0 0}
+.caption b{color:var(--mid);font-weight:600}
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;margin:12px 0 0;font-size:12.5px;color:var(--mid)}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.legend i{display:inline-block;width:18px;height:3px;border-radius:2px}
+.legend i.box{height:9px;width:14px;border-radius:1px}
+.legend svg{flex:none}
+.loadErr{font-size:13.5px;color:var(--mid);margin:0;padding:24px 4px}
+.loadErr code{font-family:var(--mono);color:var(--ink)}
+
+details.data{margin-top:22px}
+details.data summary{cursor:pointer;font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--mid);width:max-content;max-width:100%}
+details.data summary:focus-visible{outline:2px solid var(--solar);outline-offset:3px}
+.tableWrap{overflow-x:auto;margin-top:14px;border:1px solid var(--line);border-radius:4px}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:9px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+th.l,td.l{text-align:left}
+thead th{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:500;background:var(--panel)}
+tbody td{font-family:var(--mono);color:var(--mid)}
+tbody td.name{font-family:var(--display);color:var(--ink)}
+tbody tr:last-child td{border-bottom:0}
+tbody tr.total td{color:var(--ink)}
+
+/* ---------- now ---------- */
+.nowGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.nowCell{padding:22px 22px 24px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:12px;min-width:0}
+.nowCell:last-child{border-right:0}
+.nowCell h3{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.nowCell h3 span{font:400 12px var(--display);color:var(--dim)}
+.nowCell .big{font-family:var(--mono);font-size:28px;font-weight:500;letter-spacing:-.03em;line-height:1}
+.nowCell .state{font-size:13.5px;color:var(--mid);margin:0;line-height:1.45}
+.nowCell dl{margin:4px 0 0;display:grid;gap:9px}
+.nowCell dt{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+.nowCell dd{margin:2px 0 0;font-size:13.5px;color:var(--ink)}
+.nowCell dd .d{font-family:var(--mono);color:var(--mid);font-size:12.5px}
+.nowCell .go{margin-top:auto;align-self:flex-start;font:500 12.5px var(--display);color:var(--mid);background:none;border:0;
+  border-bottom:1px solid var(--line2);padding:2px 0;cursor:pointer}
+.nowCell .go:hover{color:var(--ink);border-color:var(--net)}
+.nowCell .go:focus-visible{outline:2px solid var(--solar);outline-offset:3px}
+
+/* ---------- close-up ---------- */
+.encGrid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:18px 26px}
+.encPick{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end}
+.encPick .ctl{flex:1;min-width:240px}
+.encPick select{width:100%}
+.axisSeg{margin-left:auto}
+
+/* ---------- stories ---------- */
+.cases{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:46px 48px}
+.case{border-top:2px solid var(--line2);padding-top:18px;display:flex;flex-direction:column}
+.case .when{font-family:var(--mono);font-size:12px;color:var(--solar);letter-spacing:.04em}
+.case h3{font-size:21px;margin:8px 0 12px;letter-spacing:-.015em}
+.case .prose{font-size:16px;line-height:1.62}
+.case .prose + .prose{margin-top:12px}
+.case .acts{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+
+/* ---------- method ---------- */
+.steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:28px}
+.step{border-top:2px solid var(--line2);padding-top:18px}
+.step .n{font-family:var(--mono);font-size:12px;color:var(--solar);letter-spacing:.1em}
+.step h3{margin:8px 0 10px;font-size:18px}
+.step p{font-family:var(--prose);font-size:15.5px;line-height:1.6;color:var(--mid);margin:0}
+
+/* ---------- limits ---------- */
+.limits{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:48px;align-items:start}
+.limits ul{list-style:none;margin:0;padding:0;display:grid;gap:22px}
+.limits li{padding-left:18px;border-left:2px solid var(--line2)}
+.limits li h3{font-size:16.5px;margin-bottom:6px}
+.limits li p{font-family:var(--prose);font-size:16px;line-height:1.6;color:var(--mid);margin:0}
+
+/* ---------- skills and footer ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+.chip{font-family:var(--mono);font-size:12.5px;color:var(--mid);border:1px solid var(--line2);border-radius:2px;padding:6px 10px;background:var(--deep)}
+footer{padding-block:64px 70px}
+.sign{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-end;justify-content:space-between}
+.sign h2{font-size:clamp(24px,3vw,32px)}
+.sign .prose{margin-top:10px;font-size:16px}
+.links{display:flex;flex-direction:column;align-items:flex-end;gap:12px}
+.mail{font-family:var(--mono);font-size:15px;color:var(--ink);text-decoration:none;border-bottom:1px solid var(--net);padding-bottom:2px}
+.mail:hover{color:var(--net)}
+.mail:focus-visible,.links a:focus-visible{outline:2px solid var(--solar);outline-offset:4px}
+.links a.alt{font-size:13.5px;color:var(--mid);text-decoration:none;border-bottom:1px solid var(--line2)}
+.links a.alt:hover{color:var(--ink)}
+.credits{margin:44px 0 0;font-size:12.5px;color:var(--dim);line-height:1.6;max-width:90ch}
+
+@media (max-width:980px){
+  .steps{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:900px){
+  .hero{grid-template-columns:1fr;gap:20px}
+  .figures,.nowGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .fig:nth-child(2),.nowCell:nth-child(2){border-right:0}
+  .fig:nth-child(-n+2),.nowCell:nth-child(-n+2){border-bottom:1px solid var(--line)}
+  .secHead,.limits,.encGrid,.cases{grid-template-columns:1fr}
+  .steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+  section{padding-block:60px}
+  .links{align-items:flex-start}
+}
+@media (max-width:520px){
+  .figures,.nowGrid{grid-template-columns:1fr}
+  .fig,.nowCell{border-right:0;border-bottom:1px solid var(--line)}
+  .fig:last-child,.nowCell:last-child{border-bottom:0}
+  .fig{padding:18px 4px}
+  .nowCell{padding:20px 4px}
+  .fig .val{font-size:26px}
+  .stage{padding:16px 12px 10px}
+  .steps{grid-template-columns:1fr}
+  .axisSeg{margin-left:0}
+  .seg button{padding:9px 9px;font-size:12.5px}
+  #ring text{font-size:17px}
+  #ring .lab{font-size:21px}
+  #ring .region{font-size:18px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap hero">
+    <div>
+      <p class="kicker">Space situational awareness from public data</p>
+      <h1>Who is parked next to your satellite?</h1>
+      <p class="lede">In geostationary orbit some satellites are built to inspect others. Russia's
+        Luch/Olymp satellites move along the belt and stop a few tens of kilometres from
+        communications satellites; China's SJ-21 towed a dead satellite away and later docked with
+        SJ-25. From the public catalogue of orbits alone, I built a pipeline that detects their
+        manoeuvres, finds where they park and measures how close they get. It finds <b><span data-fact="reportedFound">8</span> of the
+        <span data-fact="reportedTotal">8</span></b> satellites that public analyses name as
+        Luch/Olymp-K targets, and its manoeuvre detector scores <b>F1&nbsp;<span data-fact="validation.f1" data-fmt="f2">0.90</span></b>
+        against operator logs.</p>
+      <div class="cta">
+        <a class="btn primary" href="#closeup">Explore the encounters
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1v9M2 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></a>
+        <a class="btn" href="https://github.com/eduacu2001/geo-watch">Code on GitHub</a>
+      </div>
+      <p class="byline"><b>Eduardo Acuña</b> · Python, SGP4 and Space-Track data to <span data-fact="dataUntil" data-fmt="day">10 Oct 2026</span></p>
+    </div>
+
+    <div class="ringBox">
+      <svg id="ring" viewBox="0 0 640 640" role="img" aria-labelledby="ringTitle">
+        <title id="ringTitle">The geostationary belt seen from above the North Pole, with the selected inspector satellite and its recent path</title>
+        <g id="ringStatic"></g><g id="ringDyn"></g>
+      </svg>
+      <div class="ringCtl">
+        <div class="ctl"><span class="ctlLab">Inspector</span>
+          <div class="seg inspSeg" role="group" aria-label="Inspector satellite" id="ringSeg"></div>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:12px;flex:1;min-width:230px">
+          <button type="button" class="play" id="playBtn" aria-label="Replay the inspector's history">
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" id="playIcon"><path d="M3 1.5v11l9-5.5z" fill="currentColor"/></svg>
+          </button>
+          <div class="ctl" style="flex:1">
+            <label class="ctlLab" for="tSlider">Date · <span class="num" id="tLabel">—</span></label>
+            <input type="range" id="tSlider" min="0" max="1" step="1" value="1">
+          </div>
+        </div>
+      </div>
+      <p class="hint">Earth and orbit to scale; heights above the belt exaggerated eight times. Grey dots: the
+        <span data-fact="beltCount">1,119</span> objects near GEO on <span data-fact="beltDay" data-fmt="day">7 Oct 2026</span>.</p>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="readout ringRead" id="ringRead" aria-live="polite"></div>
+
+    <div class="figures">
+      <div class="fig">
+        <span class="lab">Reported targets found</span>
+        <span class="val"><span data-fact="reportedFound">8</span><small>of <span data-fact="reportedTotal">8</span></small></span>
+        <span class="sub">satellites that public analyses name as Luch/Olymp-K targets, all found next to it from orbital data alone</span>
+      </div>
+      <div class="fig">
+        <span class="lab">Beside Intelsat 39</span>
+        <span class="val"><span data-fact="i39Days50">459</span><small>days</small></span>
+        <span class="sub">Luch/Olymp 2 within 50&nbsp;km of it, out of <span data-fact="i39Days">582</span> since March 2025; median <span data-fact="i39Median">36</span>&nbsp;km</span>
+      </div>
+      <div class="fig">
+        <span class="lab">Manoeuvres found</span>
+        <span class="val"><span data-fact="validation.found">183</span><small>of <span data-fact="validation.truth">193</span></small></span>
+        <span class="sub">logged by the operators of five weather satellites; flagged a median <span data-fact="validation.lag" data-fmt="f1">0.7</span> days after the burn</span>
+      </div>
+      <div class="fig">
+        <span class="lab">Plane change, docked</span>
+        <span class="val"><span><span data-fact="sjPlane.angle" data-fmt="f1">6.6</span>°</span><small>≈<span data-fact="sjPlane.dv">360</span> m/s</small></span>
+        <span class="sub">SJ-21 and SJ-25 tilt their orbit together in August 2025, from <span data-fact="sjPlane.incBefore" data-fmt="f1">10.6</span>° to <span data-fact="sjPlane.incAfter" data-fmt="f1">4.4</span>° of inclination</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="now">
+  <div class="wrap">
+    <div class="secHead">
+      <h2>Where they are now</h2>
+      <p class="prose">Position of each inspector on <span data-fact="beltDay" data-fmt="day">7 Oct 2026</span>
+        and the closest catalogued objects, from the latest public element sets. The page is rebuilt
+        whenever the data is refreshed.</p>
+    </div>
+    <div class="nowGrid" id="nowGrid"></div>
+  </div>
+</section>
+
+<section id="slots">
+  <div class="wrap">
+    <div class="secHead">
+      <h2>Twelve years, slot by slot</h2>
+      <p class="prose">A flat stretch is a parking slot: the inspector holds its longitude for weeks
+        or months. Blue bars mark the slots where another satellite was within half a degree. Hover
+        for the neighbours; click to see the encounter up close.</p>
+    </div>
+    <div class="stage" id="lonStage">
+      <div class="stageTop">
+        <div class="ctl"><span class="ctlLab">Inspector</span>
+          <div class="seg inspSeg" role="group" aria-label="Inspector satellite" id="lonSeg"></div>
+        </div>
+        <div class="readout" id="lonRead" aria-live="polite"></div>
+      </div>
+      <svg class="chart" id="lonChart" role="img" aria-label="Longitude of the selected inspector over time, with its parking slots and detected manoeuvres"></svg>
+      <div class="legend" aria-hidden="true">
+        <span><i style="background:var(--net)"></i>inspector longitude</span>
+        <span><i class="box" style="background:rgba(77,146,234,.45);outline:1px solid var(--base)"></i>parking slot with a neighbour</span>
+        <span><i class="box" style="background:transparent;outline:1px solid var(--line2)"></i>parking slot, nobody near</span>
+        <span><svg width="10" height="9" viewBox="0 0 10 9"><path d="M0 0h10L5 9z" fill="var(--solar)"/></svg>detected manoeuvre</span>
+      </div>
+      <div class="tip" id="lonTip" hidden></div>
+    </div>
+    <p class="caption" id="lonCaption"></p>
+    <details class="data">
+      <summary>Every parking slot as a table</summary>
+      <div class="tableWrap"><table>
+        <thead><tr><th class="l">From</th><th class="l">To</th><th>Days</th><th>Longitude</th><th class="l">Closest neighbour</th><th>Along the arc</th></tr></thead>
+        <tbody id="slotTable"></tbody>
+      </table></div>
+    </details>
+  </div>
+</section>
+
+<section id="closeup">
+  <div class="wrap">
+    <div class="secHead">
+      <h2>Up close: how near, and from where</h2>
+      <p class="prose">Both satellites are propagated hour by hour from the element sets published
+        at the time, and the inspector is placed in the target's own frame: radial (up), in-track
+        (along the orbit) and cross-track (north). The band shows how far the distance swings
+        within each day.</p>
+    </div>
+    <div class="stage" id="encStage">
+      <div class="stageTop">
+        <div class="encPick">
+          <div class="ctl"><span class="ctlLab">Highlights</span>
+            <div class="seg" role="group" aria-label="Highlighted encounters" id="pickSeg"></div>
+          </div>
+          <div class="ctl"><label class="ctlLab" for="encSel">Every encounter</label>
+            <select id="encSel"></select>
+          </div>
+        </div>
+      </div>
+      <div class="encGrid">
+        <div>
+          <svg class="chart" id="rangeChart" role="img" aria-label="Distance between the inspector and the target over time"></svg>
+        </div>
+        <div>
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <span class="ctlLab" style="padding-bottom:9px">Seen from the target</span>
+            <div class="seg axisSeg" role="group" aria-label="Vertical axis" id="axisSeg">
+              <button type="button" data-axis="R" aria-pressed="true">Radial</button>
+              <button type="button" data-axis="C" aria-pressed="false">Cross-track</button>
+            </div>
+          </div>
+          <svg class="chart" id="pathChart" role="img" aria-label="Path of the inspector around the target, in the target's frame"></svg>
+        </div>
+      </div>
+      <div class="readout stageRead" id="encRead" aria-live="polite"></div>
+      <div class="tip" id="encTip" hidden></div>
+    </div>
+    <p class="caption" id="encCaption"></p>
+  </div>
+</section>
+
+<section id="stories">
+  <div class="wrap">
+    <div class="secHead">
+      <h2>Four stories in the data</h2>
+      <p class="prose">What the pipeline reconstructs for each inspector, told from the numbers. None of
+        it needs inside information: it is all in the public catalogue, once the orbits are turned into
+        manoeuvres, slots and distances.</p>
+    </div>
+    <div class="cases">
+      <article class="case">
+        <span class="when">Luch/Olymp-K · 2014 to 2025</span>
+        <h3>Thirty-one stops along the belt</h3>
+        <p class="prose">Luch/Olymp-K held station in <b><span data-fact="luchSlots">31</span> slots</b>
+          between 24°W and 96°E, almost always beside a communications satellite:
+          <span data-fact="luchTargets">28</span> different ones within a median 100&nbsp;km. Its
+          typical stand-off is about <span data-fact="luchStandoff">65</span>&nbsp;km, and almost
+          entirely in-track: it shares the target's orbit, slightly ahead or behind, so radial and
+          cross-track offsets stay below a kilometre on average.</p>
+        <p class="prose">Its last north-south manoeuvre was in <span data-fact="luchLastNS" data-fmt="month">November 2023</span>;
+          from then on its inclination grows freely, a common way to save fuel late in a mission. In
+          October 2025 it was raised about 330&nbsp;km above the belt, where it drifts west by 4.2° a day:
+          consistent with retirement to a graveyard orbit.</p>
+        <div class="acts">
+          <button type="button" class="btn small" data-replay="40258">Replay on the ring</button>
+          <button type="button" class="btn small" data-open="40258:41748:2021">Behind Intelsat 33E</button>
+        </div>
+      </article>
+      <article class="case">
+        <span class="when">Luch/Olymp 2 · since 2023</span>
+        <h3>Parked beside Intelsat 39</h3>
+        <p class="prose">Launched in March 2023, Luch/Olymp 2 picked up where its predecessor left off:
+          Eutelsat KA-SAT and 9B, Eutelsat 3B and Konnect VHTS, Astra 4A, Thor 6 and 7, and Intelsat
+          10-02 together with the MEV-2 servicing vehicle docked to it.</p>
+        <p class="prose">Since March 2025 it has not moved from Intelsat 39 at 62°E: within 50&nbsp;km for
+          <b><span data-fact="i39Days50">459</span> of <span data-fact="i39Days">582</span> days</b>,
+          a median <span data-fact="i39Median">36</span>&nbsp;km away and slightly ahead of it.</p>
+        <div class="acts">
+          <button type="button" class="btn small" data-replay="55841">Replay on the ring</button>
+          <button type="button" class="btn small" data-open="55841:44476">Beside Intelsat 39</button>
+        </div>
+      </article>
+      <article class="case">
+        <span class="when">SJ-21 · December 2021 to January 2022</span>
+        <h3>A tow to the graveyard</h3>
+        <p class="prose">Two months after its launch, SJ-21 reached the dead navigation satellite Beidou-2 G2
+          and from 30 December the two are tracked within a few kilometres of each other. On
+          25&nbsp;January 2022 the pair appears about 1,700&nbsp;km above the belt; two days later SJ-21
+          is back near GEO, while Beidou-2 G2 stays in an orbit between 300 and 3,100&nbsp;km above it,
+          where it still drifts west by 20° a day.</p>
+        <p class="prose">Between 11 and 21 January the two catalogue entries part by up to 2,000&nbsp;km
+          before coinciding again: from public data alone it is impossible to say whether the objects
+          separated or one entry was mis-assigned.</p>
+        <div class="acts">
+          <button type="button" class="btn small" data-replay="49330" data-at="2022-01-28">See the tow on the ring</button>
+          <button type="button" class="btn small" data-open="49330:34779">The docking and tow</button>
+        </div>
+      </article>
+      <article class="case">
+        <span class="when">SJ-21 and SJ-25 · 2025 to 2026</span>
+        <h3>Two servicers, one object</h3>
+        <p class="prose">SJ-25 was launched in January 2025. In June both satellites moved to about
+          127.5°E, and in mid-August the inclination of both dropped from
+          <span data-fact="sjPlane.incBefore" data-fmt="f1">10.6</span>° to
+          <span data-fact="sjPlane.incAfter" data-fmt="f1">4.4</span>° within a week: a
+          <span data-fact="sjPlane.angle" data-fmt="f1">6.6</span>° plane change, about
+          <span data-fact="sjPlane.dv">360</span>&nbsp;m/s, made while the two were reported to be docked.</p>
+        <p class="prose">In October and November 2025 they are a median
+          <span data-fact="sjDockedMedian" data-fmt="km">60 m</span> apart, far below the TLE noise: the
+          catalogue sees one object. By <span data-fact="beltDay" data-fmt="day">7 Oct 2026</span> they are
+          <span data-fact="sjNow" data-fmt="km">497 km</span> apart again.</p>
+        <div class="acts">
+          <button type="button" class="btn small" data-replay="62485" data-at="2025-10-30">See them together on the ring</button>
+          <button type="button" class="btn small" data-open="62485:49330:min">Docked</button>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="validation">
+  <div class="wrap">
+    <div class="secHead">
+      <h2>Can the manoeuvre detector be trusted?</h2>
+      <p class="prose">Nobody publishes an inspector's manoeuvres, so the detector was scored where the
+        truth is known: five Fengyun weather satellites whose operator logged every burn between 2011
+        and 2022 (<a href="https://arxiv.org/abs/2212.08662">Shorten et al., 2023</a>). Same code and
+        same thresholds as for the inspectors.</p>
+    </div>
+    <div class="stage" id="valStage">
+      <div class="stageTop">
+        <div class="ctl"><span class="ctlLab">Satellite</span>
+          <div class="seg" role="group" aria-label="Validation satellite" id="valSeg"></div>
+        </div>
+        <div class="readout" id="valRead" aria-live="polite"></div>
+      </div>
+      <svg class="chart" id="valChart" role="img" aria-label="Longitude drift rate of the selected Fengyun satellite with logged and detected manoeuvres"></svg>
+      <div class="legend" aria-hidden="true">
+        <span><i style="background:var(--mid)"></i>drift rate from the TLEs</span>
+        <span><svg width="10" height="12" viewBox="0 0 10 12"><rect x="3" y="0" width="4" height="12" fill="var(--real)"/></svg>logged by the operator</span>
+        <span><svg width="10" height="12" viewBox="0 0 10 12"><rect x="3.5" y="0.5" width="3" height="11" fill="none" stroke="var(--real)"/></svg>logged, missed</span>
+        <span><svg width="10" height="9" viewBox="0 0 10 9"><path d="M0 0h10L5 9z" fill="var(--solar)"/></svg>detected, matches the log</span>
+        <span><svg width="10" height="9" viewBox="0 0 10 9"><path d="M.8 .5h8.4L5 8z" fill="none" stroke="var(--solar)"/></svg>detected, not in the log</span>
+      </div>
+      <div class="tip" id="valTip" hidden></div>
+    </div>
+    <p class="caption">A detection counts if it falls between one day before and four days after a logged
+      burn: TLEs react late, because the catalogue needs several days of tracking to refit an orbit. Most
+      detections that are "not in the log" are real: many are as large as the logged ones and clearly
+      visible in the data, so the precision is a lower bound.</p>
+    <details class="data">
+      <summary>Scores per satellite, and a second detector</summary>
+      <div class="tableWrap"><table>
+        <thead><tr><th class="l">Satellite</th><th>Logged</th><th>Found</th><th>Not in log</th><th>Precision</th><th>Recall</th><th>F1</th><th>Median lag</th></tr></thead>
+        <tbody id="valTable"></tbody>
+      </table></div>
+      <p class="caption">The second row of the comparison is an extended Kalman filter on the
+        longitude dynamics (the J22 pull towards 75°E and 105°W), flagging a manoeuvre when two
+        consecutive TLEs fail a χ² test. It reacts slightly earlier and raises a few more alarms.</p>
+      <div class="tableWrap"><table>
+        <thead><tr><th class="l">Detector</th><th>Found</th><th>Not in log</th><th>Precision</th><th>Recall</th><th>F1</th><th>Median lag</th></tr></thead>
+        <tbody id="cmpTable"></tbody>
+      </table></div>
+    </details>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="secHead"><h2>How it works</h2>
+      <p class="prose">Five steps in Python, from the public catalogue to distances in kilometres. Every
+        step is tested, and the code is <a href="https://github.com/eduacu2001/geo-watch">on GitHub</a>.</p></div>
+    <div class="steps">
+      <div class="step"><span class="n">01</span><h3>Download</h3>
+        <p>The full TLE history of each object from Space-Track, cached and updated incrementally to stay
+          inside the usage limits, plus the whole GEO belt around every parking date.</p></div>
+      <div class="step"><span class="n">02</span><h3>Mean elements</h3>
+        <p>Each element set becomes a longitude, a drift rate and an inclination, propagating with SGP4
+          across one full orbit so that the daily oscillation cancels out.</p></div>
+      <div class="step"><span class="n">03</span><h3>Manoeuvres</h3>
+        <p>A step in drift rate or inclination flags a burn, judged against the local noise with
+          robust statistics; the size of the step gives the Δv.</p></div>
+      <div class="step"><span class="n">04</span><h3>Neighbours</h3>
+        <p>Weeks at one longitude become a parking slot, and every catalogued object within half a
+          degree of it becomes a candidate target.</p></div>
+      <div class="step"><span class="n">05</span><h3>Relative motion</h3>
+        <p>Inspector and target are propagated together and the distance is resolved in the target's
+          radial, in-track and cross-track frame, with the TLE error measured from the data.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="limits">
+  <div class="wrap limits">
+    <div>
+      <h2>What the public catalogue can't tell you</h2>
+      <p class="prose" style="margin-top:18px">Public TLEs are coarse, late and occasionally wrong.
+        Every number on this page comes with those limits, and where they matter the page says so.</p>
+    </div>
+    <ul>
+      <li><h3>Kilometres, not metres</h3>
+        <p>For the pairs on this page, public element sets place an object to within a few hundred
+          metres to a few kilometres. A 40&nbsp;km stand-off is solid; a median of 60&nbsp;m only means "closer than the data can resolve", consistent with
+          docking but not a measurement of it.</p></li>
+      <li><h3>Most of a day late</h3>
+        <p>A burn shows up in the catalogue a median <span data-fact="validation.lag" data-fmt="f1">0.7</span>
+          days later, once enough tracking has been collected to refit the orbit.</p></li>
+      <li><h3>Labels can slip</h3>
+        <p>When two objects are close, an element set can be attributed to the wrong one. The SJ-21 tow
+          shows ten days of exactly that kind of ambiguity.</p></li>
+      <li><h3>Positions, not intentions</h3>
+        <p>The data shows where a satellite went and how close it got. It does not show what it did
+          there, and objects missing from the public catalogue are invisible.</p></li>
+    </ul>
+  </div>
+</section>
+
+<section id="skills">
+  <div class="wrap">
+    <h2>What it took</h2>
+    <div class="chips">
+      <span class="chip">Python</span><span class="chip">NumPy · pandas</span>
+      <span class="chip">SGP4 / SDP4</span><span class="chip">Space-Track API</span>
+      <span class="chip">TLE mean elements</span><span class="chip">GEO station-keeping dynamics</span>
+      <span class="chip">Change detection &amp; robust statistics</span><span class="chip">Extended Kalman filter</span>
+      <span class="chip">RIC relative motion</span><span class="chip">Validation against ground truth</span>
+      <span class="chip">pytest · ruff · GitHub Actions</span><span class="chip">SVG data visualisation</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="sign">
+      <div>
+        <p class="kicker">GEO Watch</p>
+        <h2 style="margin-top:10px">Eduardo Acuña</h2>
+        <p class="prose">Aerospace engineer, MSc in Operation of Space Systems. Open to opportunities in the space sector.</p>
+      </div>
+      <div class="links">
+        <a class="mail" href="mailto:eduacu2001@gmail.com">eduacu2001@gmail.com</a>
+        <a class="alt" href="https://github.com/eduacu2001/geo-watch">Source code and method on GitHub</a>
+        <a class="alt" href="https://eduacu2001.github.io/">My MSc thesis: satellites lost in thin air</a>
+      </div>
+    </div>
+    <p class="credits">Orbital data: <a href="https://www.space-track.org">Space-Track.org</a> (18th and 19th
+      Space Defense Squadrons). Raw data is not redistributed; this page shows only derived results.
+      Ground-truth manoeuvres: Shorten, Yang, Maclean and Roughan, <a href="https://arxiv.org/abs/2212.08662">arXiv:2212.08662</a>.
+      Public target list for Luch/Olymp-K: <a id="reportedSrc" href="https://kayhan.space/blog/tracking-the-tracker-is-russias-luch-olymp-approaching-the-end-of-its-mission/aid/34">Kayhan Space</a>.
+      Data generated <span data-fact="generated">—</span>.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+"use strict";
+const $ = s => document.querySelector(s);
+const RAD = Math.PI/180;
+const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const C = {base:tok("--base"), net:tok("--net"), real:tok("--real"), solar:tok("--solar"), ink:tok("--ink"),
+           mid:tok("--mid"), dim:tok("--dim"), line:tok("--line"), line2:tok("--line2"), panel:tok("--panel"),
+           void:tok("--void"), deep:tok("--deep")};
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const MONTH = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTH_LONG = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const toDate = d => new Date(Math.round(d*864e5));
+const fmtDay = d => { const t = toDate(d); return t.getUTCDate()+" "+MONTH[t.getUTCMonth()]+" "+t.getUTCFullYear(); };
+const fmtMonth = d => { const t = toDate(d); return MONTH[t.getUTCMonth()]+" "+t.getUTCFullYear(); };
+const fmtMonthLong = d => { const t = toDate(d); return MONTH_LONG[t.getUTCMonth()]+" "+t.getUTCFullYear(); };
+const dayOf = iso => Date.parse(iso+"T00:00:00Z")/864e5;
+const lonStr = (l, dp=1) => (Math.abs(l)<0.05 ? "0" : Math.abs(l).toFixed(dp))+"°"+(Math.abs(l)<0.05 ? "" : (l>0?" E":" W"));
+const kmStr = v => v==null ? "—" : v<0.01 ? "< 10 m" : v<1 ? Math.round(v*100)*10+" m" : v<10 ? v.toFixed(1)+" km" : Math.round(v).toLocaleString("en-GB")+" km";
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const KIND = {sk:"station-keeping", start:"drift start", stop:"drift stop", drift:"drift change", ns:"inclination change", other:"manoeuvre"};
+const kindStr = k => { const [b, x] = String(k).split("+"); return (KIND[b]||"manoeuvre")+(x ? " + inclination" : ""); };
+
+function cell(k, v, sw, sub){
+  const d = document.createElement("div");
+  const kk = document.createElement("span"); kk.className = "k";
+  if (sw){ const i = document.createElement("i"); i.className = "sw"; i.style.background = sw; kk.appendChild(i); }
+  kk.appendChild(document.createTextNode(k));
+  const vv = document.createElement("span"); vv.className = "v"; vv.textContent = v;
+  d.append(kk, vv);
+  if (sub){ const ss = document.createElement("span"); ss.className = "s"; ss.textContent = sub; d.appendChild(ss); }
+  return d;
+}
+function setReadout(el, cells){ el.replaceChildren(...cells.map(c => cell(...c))); }
+function wireSeg(seg, attr, onPick){
+  seg.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    onPick(b.dataset[attr]);
+  });
+}
+function pressSeg(seg, attr, value){
+  seg.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset[attr]===String(value))));
+}
+function placeTip(tip, stage, x, y){
+  const sr = stage.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+  let left = x - sr.left + 16, top = y - sr.top - h - 12;
+  if (left + w > sr.width - 6) left = x - sr.left - w - 16;
+  if (top < 6) top = y - sr.top + 18;
+  tip.style.left = Math.max(6, left)+"px"; tip.style.top = top+"px";
+}
+/* "nice" tick step for a span covered by about n ticks */
+function niceStep(span, n){
+  const raw = span/Math.max(1,n), p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw/p;
+  return (f<1.5?1:f<3?2:f<7?5:10)*p;
+}
+/* time ticks between two Unix days: years, quarters, months or weeks */
+function timeTicks(d0, d1, maxTicks){
+  const out = [], a = toDate(d0), span = d1-d0;
+  const pushMonths = step => {
+    let y = a.getUTCFullYear(), m = a.getUTCMonth()+1;
+    m = Math.ceil(m/step)*step; while (m>=12){ m-=12; y++; }
+    for (;;){ const d = Date.UTC(y,m,1)/864e5; if (d>d1) break; if (d>=d0) out.push({d, lab: m===0 ? String(y) : MONTH[m]+(step>=3||m===0?" "+String(y).slice(2):"")});
+      m += step; while (m>=12){ m-=12; y++; } }
+  };
+  if (span > 365*2.2){ const yStep = Math.max(1, Math.ceil(span/365/maxTicks));
+    for (let y = a.getUTCFullYear()+1; ; y++){ const d = Date.UTC(y,0,1)/864e5; if (d>d1) break; if ((y%yStep)===0) out.push({d, lab:String(y)}); } }
+  else if (span > 200){ pushMonths(span/30/maxTicks > 2 ? 6 : 3); }
+  else if (span > 60){ pushMonths(1); }
+  else { const step = span>30 ? 7 : span>12 ? 3 : 1;
+    for (let d = Math.ceil(d0); d<=d1; d+=step){ const t = toDate(d); out.push({d, lab:t.getUTCDate()+" "+MONTH[t.getUTCMonth()]}); } }
+  return out;
+}
+
+let D, ENC, OBJ = {}, INSP = [], ENC_BY_ID = {};
+const S = {insp:40258, t:0, playing:false, enc:null, axis:"R", val:"Fengyun-4A", hoverEnc:null};
+
+/* ===================================================================== data access */
+function sampleAt(o, d){
+  const tr = o.track; if (!tr || tr.d0===null) return null;
+  const n = tr.lon.length; let i = Math.floor(d - tr.d0);
+  if (i < 0) return null;
+  if (i >= n){ if (i - n > 3) return null; i = n-1; }
+  for (let k=0; k<6 && i-k>=0; k++){ const j = i-k;
+    if (tr.lon[j]!==null) return {lon:tr.lon[j], dh:tr.dh[j], inc:tr.inc[j], drift:tr.drift[j], j}; }
+  return null;
+}
+const trackStart = o => o.track.d0;
+const trackEnd = o => o.track.d0 + o.track.lon.length - 1;
+const slotAt = (o, d) => (o.slots||[]).find(s => d >= s.d0 - 0.5 && d <= s.d1 + 0.5) || null;
+function encFor(chaser, target, slotK){
+  return ENC.filter(e => e.chaser===chaser && e.target===target && (slotK==null || e.slot===slotK))
+            .sort((a,b) => a.median-b.median)[0] || null;
+}
+function getFact(path){ return path.split(".").reduce((o,k) => o==null ? o : o[k], D.facts); }
+
+function fillFacts(){
+  const extra = {dataUntil:D.dataUntil, beltDay:D.belt ? D.belt.d : null, beltCount:D.belt ? D.belt.lon.length : null,
+    generated:D.generated};
+  const sj = D.now.find(n => n.id===49330);
+  if (sj){ const c = sj.closest.find(c => c.id===62485); if (c) extra.sjNow = c.km; }
+  document.querySelectorAll("[data-fact]").forEach(el => {
+    const key = el.dataset.fact, v = key in extra ? extra[key] : getFact(key);
+    if (v==null) return;
+    const f = el.dataset.fmt;
+    el.textContent = f==="day" ? fmtDay(v) : f==="month" ? fmtMonthLong(v) : f==="f1" ? (+v).toFixed(1)
+      : f==="f2" ? (+v).toFixed(2) : f==="km" ? kmStr(v) : typeof v==="number" ? Math.round(v).toLocaleString("en-GB") : v;
+  });
+  if (D.reported && D.reported.source) $("#reportedSrc").href = D.reported.source;
+}
+
+/* ===================================================================== the ring */
+const RING = {cx:320, cy:320, R:226, exag:8};
+RING.earth = RING.R*6378/42164;
+function ringXY(lon, dh, extra){
+  const r = RING.R + clamp((dh||0)*RING.R/42164*RING.exag, -40, 44) + (extra||0);
+  return [RING.cx + r*Math.sin(lon*RAD), RING.cy + r*Math.cos(lon*RAD)];
+}
+function buildRingStatic(){
+  const {cx, cy, R} = RING; let s = "";
+  s += '<defs><radialGradient id="earthG" cx="42%" cy="40%" r="70%"><stop offset="0" stop-color="#2c5e7a"/><stop offset="1" stop-color="#0e2230"/></radialGradient></defs>';
+  s += '<circle cx="'+cx+'" cy="'+cy+'" r="'+R+'" fill="none" stroke="'+C.line2+'" stroke-width="1"/>';
+  for (let l=-180; l<180; l+=10){
+    const big = l%30===0, [x1,y1] = ringXY(l, 0, big ? -7 : -4), [x2,y2] = ringXY(l, 0, big ? -14 : -8);
+    s += '<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" stroke="'+C.line2+'"/>';
+    if (big){ const [tx,ty] = ringXY(l, 0, 64), lab = l===0 ? "0°" : l===-180 ? "180°" : Math.abs(l)+"°"+(l>0?"E":"W");
+      s += '<text x="'+tx.toFixed(1)+'" y="'+(ty+4).toFixed(1)+'" text-anchor="middle">'+lab+'</text>'; }
+  }
+  /* where the users of each part of the belt live */
+  [["Americas",-80],["Europe · Africa",12],["Asia",100],["Pacific",178]].forEach(([t,l]) => {
+    const [x,y] = ringXY(l, 0, -58); s += '<text class="region" x="'+x.toFixed(1)+'" y="'+(y+4).toFixed(1)+'" text-anchor="middle">'+t+'</text>'; });
+  /* the belt today */
+  if (D.belt){ const b = D.belt;
+    for (let i=0; i<b.lon.length; i++){ if (b.lon[i]===null) continue;
+      const [x,y] = ringXY(b.lon[i], b.dh[i]), p = b.type[i]==="P";
+      s += '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="'+(p?1.5:1.1)+'" fill="'+C.mid+'" opacity="'+(p?0.42:0.26)+'"/>'; } }
+  s += '<circle cx="'+cx+'" cy="'+cy+'" r="'+RING.earth.toFixed(1)+'" fill="url(#earthG)"/>';
+  s += '<circle cx="'+cx+'" cy="'+cy+'" r="1.6" fill="'+C.ink+'" opacity=".7"/>';
+  s += '<text x="'+cx+'" y="'+(cy+RING.earth+16)+'" text-anchor="middle" style="font-size:10px">Earth</text>';
+  $("#ringStatic").innerHTML = s;
+}
+function anchorFor(x){ return x > RING.cx+14 ? "start" : x < RING.cx-14 ? "end" : "middle"; }
+function drawRing(){
+  const sel = OBJ[S.insp], t = S.t; let s = "";
+  const ps = sampleAt(sel, t), selXY = ps ? ringXY(ps.lon, ps.dh) : null;
+  /* the others, in grey */
+  D.objects.forEach(o => { if (o.id===S.insp) return; const p = sampleAt(o, t); if (!p) return;
+    const [x,y] = ringXY(p.lon, p.dh);
+    s += '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="3.2" fill="'+C.mid+'" stroke="'+C.void+'" stroke-width="1.2"/>';
+    if (!selXY || Math.hypot(selXY[0]-x, selXY[1]-y) > 26){ const [lx,ly] = ringXY(p.lon, p.dh, 13);
+      s += '<text x="'+lx.toFixed(1)+'" y="'+(ly+4).toFixed(1)+'" text-anchor="'+anchorFor(lx)+'" style="fill:'+C.mid+';font-size:10.5px">'+esc(o.name)+'</text>'; } });
+  /* the satellite it is parked next to */
+  const slot = slotAt(sel, t);
+  if (ps && slot && slot.near.length && slot.near[0].arc <= 150){
+    const h = slot.near[0], [x,y] = ringXY(slot.lon, 0, -11), [lx,ly] = ringXY(slot.lon, 0, -24);
+    s += '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="4" fill="'+C.base+'" stroke="'+C.void+'" stroke-width="1.4"/>';
+    s += '<text class="lab" x="'+lx.toFixed(1)+'" y="'+(ly+4).toFixed(1)+'" text-anchor="'+anchorFor(2*RING.cx-lx)+'" style="fill:'+C.base+'">'+esc(h.name)+'</text>';
+  }
+  /* recent path: 120 days, fading */
+  if (ps){
+    const pts = [];
+    for (let k=120; k>=0; k--){ const p = sampleAt(sel, t-k); if (p && (!pts.length || pts[pts.length-1].j!==p.j)) pts.push(p); }
+    const chunks = 8, per = Math.ceil(pts.length/chunks);
+    for (let c=0; c<chunks; c++){
+      const seg = pts.slice(c*per, (c+1)*per+1); if (seg.length<2) continue;
+      let dpath = "", prev = null;
+      seg.forEach(p => {
+        if (!prev){ const [x,y] = ringXY(p.lon, p.dh); dpath += "M"+x.toFixed(1)+" "+y.toFixed(1); prev = p; return; }
+        const dl = ((p.lon-prev.lon+540)%360)-180, steps = Math.max(1, Math.ceil(Math.abs(dl)/3));
+        for (let k=1; k<=steps; k++){ const f = k/steps, [x,y] = ringXY(prev.lon+dl*f, prev.dh+(p.dh-prev.dh)*f);
+          dpath += "L"+x.toFixed(1)+" "+y.toFixed(1); }
+        prev = p; });
+      s += '<path d="'+dpath+'" fill="none" stroke="'+C.net+'" stroke-width="2" stroke-linecap="round" opacity="'+(0.12+0.6*c/(chunks-1)).toFixed(2)+'"/>';
+    }
+    const [x,y] = selXY, [lx,ly] = ringXY(ps.lon, ps.dh, 16);
+    s += '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="11" fill="'+C.net+'" opacity=".16"/>';
+    s += '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="5.2" fill="'+C.net+'" stroke="'+C.void+'" stroke-width="1.5"/>';
+    s += '<text class="lab" x="'+lx.toFixed(1)+'" y="'+(ly+4).toFixed(1)+'" text-anchor="'+anchorFor(lx)+'" style="fill:'+C.ink+'">'+esc(sel.name)+'</text>';
+  }
+  $("#ringDyn").innerHTML = s;
+  updateRingRead(sel, ps, slot);
+  $("#tLabel").textContent = fmtDay(t);
+  moveLonCursor();
+}
+function motionStr(p){
+  if (p.drift===null) return "—";
+  if (Math.abs(p.drift) < 0.02) return "holding station";
+  return "drifting "+(p.drift<0?"west ":"east ")+Math.abs(p.drift).toFixed(Math.abs(p.drift)<1?2:1)+"°/day";
+}
+function updateRingRead(sel, p, slot){
+  const el = $("#ringRead");
+  if (!p){ const s0 = trackStart(sel);
+    setReadout(el, [["Date", fmtDay(S.t)], [sel.name, S.t < s0 ? "not in GEO yet" : "no data", null,
+      S.t < s0 ? "arrives in "+fmtMonth(s0) : ""]]); return; }
+  let next = "—", sub = "";
+  if (slot && slot.near.length && slot.near[0].arc <= 150){
+    const h = slot.near[0], e = ENC ? encFor(sel.id, h.id, slot.k) : null;
+    next = h.name; sub = e ? "median "+kmStr(e.median)+" apart" : kmStr(h.arc)+" along the arc";
+  } else if (Math.abs(p.drift||0) >= 0.02) { next = "on the move"; }
+  setReadout(el, [
+    ["Date", fmtDay(S.t)],
+    ["Longitude", lonStr(p.lon, 2), C.net],
+    ["Motion", motionStr(p)],
+    ["Height above GEO", (p.dh>=0?"+":"−")+Math.abs(p.dh).toLocaleString("en-GB")+" km"],
+    ["Parked next to", next, slot && slot.near.length ? C.base : null, sub]
+  ]);
+}
+
+/* time slider and replay */
+const slider = $("#tSlider");
+let T0 = 0, T1 = 1, playStart = 0, raf = 0;
+const PLAY_RATE = 160;  /* days per second */
+function setTime(t, fromSlider){
+  S.t = clamp(t, T0, T1); if (!fromSlider) slider.value = Math.round(S.t);
+  drawRing();
+}
+function setPlayIcon(){ $("#playIcon").innerHTML = S.playing
+  ? '<path d="M3 1.5h3v11H3zM8 1.5h3v11H8z" fill="currentColor"/>' : '<path d="M3 1.5v11l9-5.5z" fill="currentColor"/>';
+  $("#playBtn").setAttribute("aria-label", S.playing ? "Pause" : "Replay the inspector's history"); }
+function stopPlay(){ S.playing = false; cancelAnimationFrame(raf); setPlayIcon(); }
+function play(from){
+  const o = OBJ[S.insp];
+  if (from!=null) setTime(from); else if (S.t >= trackEnd(o)-1) setTime(trackStart(o));
+  else if (S.t < trackStart(o)) setTime(trackStart(o));
+  S.playing = true; setPlayIcon(); let last = performance.now();
+  const step = now => {
+    if (!S.playing) return;
+    const dt = Math.min(0.1, (now-last)/1000); last = now;
+    const end = Math.min(T1, trackEnd(OBJ[S.insp]));
+    if (ringVisible) setTime(S.t + dt*PLAY_RATE);
+    if (S.t >= end){ setTime(end); stopPlay(); return; }
+    raf = requestAnimationFrame(step);
+  };
+  raf = requestAnimationFrame(step);
+}
+let ringVisible = true;
+if ("IntersectionObserver" in window) new IntersectionObserver(e => { ringVisible = e[0].isIntersecting; }, {threshold:0.05}).observe($("#ring"));
+
+/* one inspector selected everywhere */
+function selectInsp(id, opts){
+  opts = opts || {};
+  S.insp = +id; const o = OBJ[S.insp];
+  document.querySelectorAll(".inspSeg").forEach(seg => pressSeg(seg, "insp", S.insp));
+  if (opts.at!=null) setTime(opts.at);
+  else if (S.t < trackStart(o) || S.t > trackEnd(o)+3) setTime(trackEnd(o));
+  else drawRing();
+  drawLon();
+}
+
+/* ===================================================================== now */
+function buildNow(){
+  const grid = $("#nowGrid");
+  grid.innerHTML = D.now.map(n => {
+    const o = OBJ[n.id], last = (o.manoeuvres||[]).slice(-1)[0];
+    const state = Math.abs(n.drift) < 0.02 ? "Holding station" : "Drifting "+(n.drift<0?"west":"east")+" "+Math.abs(n.drift).toFixed(2)+"°/day";
+    const h = Math.abs(n.dh) < 15 ? "on the belt" : kmStr(Math.abs(n.dh))+(n.dh>0?" above":" below")+" GEO";
+    const close = n.closest.length ? n.closest.map((c,i) => (i ? '<br>' : '')+esc(c.name)+' <span class="d">'+kmStr(c.km)+'</span>').join("") : "—";
+    return '<div class="nowCell"><h3>'+esc(o.name)+'<span>'+esc(o.country)+'</span></h3>'
+      + '<div class="big">'+lonStr(n.lon, 1)+'</div>'
+      + '<p class="state">'+state+', '+h+'. Inclination '+n.inc.toFixed(2)+'°.</p>'
+      + '<dl><div><dt>Closest objects</dt><dd>'+close+'</dd></div>'
+      + '<div><dt>Last manoeuvre detected</dt><dd>'+(last ? fmtDay(last.d)+' <span class="d">'+kindStr(last.k)+'</span>' : '—')+'</dd></div></dl>'
+      + '<button type="button" class="go" data-replay="'+n.id+'" data-at="'+toDate(n.d).toISOString().slice(0,10)+'">Show on the ring</button></div>';
+  }).join("");
+}
+
+/* ===================================================================== longitude vs time */
+const lonSvg = $("#lonChart");
+let LON = null;
+function drawLon(){
+  const o = OBJ[S.insp], tr = o.track;
+  const W0 = lonSvg.clientWidth || 900, narrow = W0 < 560;
+  const H0 = narrow ? 300 : 380;
+  lonSvg.setAttribute("viewBox", "0 0 "+W0+" "+H0); lonSvg.setAttribute("height", H0);
+  const M = {l:narrow?46:56, r:12, t:30, b:30}, W = W0-M.l-M.r, H = H0-M.t-M.b;
+  const d0 = trackStart(o), d1 = trackEnd(o);
+  /* slots plus the central 94 % of the track: roaming shows, a final drift around the globe does not squash the slots */
+  const tv = tr.lon.filter(x=>x!==null).sort((a,b)=>a-b);
+  let lo = tv[Math.floor(tv.length*.03)], hi = tv[Math.min(tv.length-1, Math.floor(tv.length*.97))];
+  if (o.slots.length){ lo = Math.min(lo, ...o.slots.map(s=>s.lon)); hi = Math.max(hi, ...o.slots.map(s=>s.lon)); }
+  const pad = Math.max(3, (hi-lo)*0.12); lo -= pad; hi += pad;
+  const X = d => M.l + (d-d0)/(d1-d0)*W, Y = l => M.t + (hi-l)/(hi-lo)*H;
+  let g = '<defs><clipPath id="lonClip"><rect x="'+M.l+'" y="'+M.t+'" width="'+W+'" height="'+H+'"/></clipPath></defs>';
+  const ystep = niceStep(hi-lo, narrow?4:6);
+  for (let v = Math.ceil(lo/ystep)*ystep; v<=hi; v+=ystep){ const y = Y(v).toFixed(1);
+    g += '<line x1="'+M.l+'" y1="'+y+'" x2="'+(M.l+W)+'" y2="'+y+'" stroke="'+C.line+'"/>'
+       + '<text x="'+(M.l-8)+'" y="'+(+y+4)+'" text-anchor="end">'+lonStr(v,0)+'</text>'; }
+  timeTicks(d0, d1, narrow?4:9).forEach(tk => { const x = X(tk.d).toFixed(1);
+    g += '<line x1="'+x+'" y1="'+M.t+'" x2="'+x+'" y2="'+(M.t+H)+'" stroke="'+C.line+'"/>'
+       + '<text x="'+x+'" y="'+(M.t+H+19)+'" text-anchor="middle">'+tk.lab+'</text>'; });
+  /* slots */
+  let slots = "";
+  o.slots.forEach((s, i) => {
+    const near = s.near.length && s.near[0].arc <= 150, x = X(s.d0), w = Math.max(3, X(s.d1)-x), y = Y(s.lon);
+    slots += '<g class="slot" tabindex="0" role="button" data-k="'+i+'" aria-label="Parking slot at '+lonStr(s.lon,1)+' from '+fmtDay(s.d0)+(near?', next to '+esc(s.near[0].name):'')+'">'
+      + '<rect x="'+x.toFixed(1)+'" y="'+(y-7).toFixed(1)+'" width="'+w.toFixed(1)+'" height="14" rx="1.5" fill="'+(near?"rgba(77,146,234,.42)":"transparent")+'" stroke="'+(near?C.base:C.line2)+'"/>'
+      + '<rect x="'+(x-3).toFixed(1)+'" y="'+(y-12).toFixed(1)+'" width="'+(w+6).toFixed(1)+'" height="24" fill="transparent"/></g>';
+  });
+  /* the inspector's longitude, broken at gaps and wraps */
+  let path = "", prev = null, prevI = -99;
+  for (let i=0; i<tr.lon.length; i++){ const l = tr.lon[i]; if (l===null) continue;
+    const join = prev!==null && i-prevI <= 6 && Math.abs(l-prev) <= 40;  /* bridge short TLE gaps, not wraps */
+    path += (join ? "L" : "M")+X(d0+i).toFixed(1)+" "+Y(l).toFixed(1); prev = l; prevI = i; }
+  /* manoeuvres along the top */
+  let man = "";
+  (o.manoeuvres||[]).forEach(m => { if (m.d<d0 || m.d>d1) return; const x = X(m.d);
+    man += '<path d="M'+(x-3.5).toFixed(1)+' '+(M.t-12)+'h7l-3.5 7z" fill="'+C.solar+'" opacity=".85"/>'; });
+  lonSvg.innerHTML = g + '<g clip-path="url(#lonClip)">'+'<path d="'+path+'" fill="none" stroke="'+C.net+'" stroke-width="1.6" stroke-linejoin="round"/></g>'
+    + slots + man
+    + '<text class="tl" x="'+M.l+'" y="12">Longitude · '+esc(o.name)+'</text>'
+    + '<line id="lonCur" x1="0" y1="'+M.t+'" x2="0" y2="'+(M.t+H)+'" stroke="'+C.solar+'" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>'
+    + '<rect id="lonHit" x="'+M.l+'" y="'+M.t+'" width="'+W+'" height="'+H+'" fill="transparent" style="pointer-events:none"/>';
+  LON = {X, Y, M, W, H, d0, d1, o};
+  moveLonCursor();
+  wireLonSlots();
+  $("#lonCaption").innerHTML = lonCaption(o);
+  fillSlotTable(o);
+  lonReadDefault();
+}
+function moveLonCursor(){
+  const cur = document.getElementById("lonCur"); if (!cur || !LON) return;
+  if (S.t < LON.d0 || S.t > LON.d1){ cur.setAttribute("opacity", 0); return; }
+  const x = LON.X(S.t).toFixed(1); cur.setAttribute("x1", x); cur.setAttribute("x2", x); cur.setAttribute("opacity", .8);
+}
+function lonCaption(o){
+  const n = o.slots.length, near = o.slots.filter(s => s.near.length && s.near[0].arc<=150).length;
+  const man = (o.manoeuvres||[]).length, span = (trackEnd(o)-trackStart(o))/365.25;
+  return '<b>'+esc(o.name)+'</b>: '+n+' parking slots in '+(span<2 ? Math.round(span*12)+' months' : span.toFixed(0)+' years')
+    + ', '+near+' of them with another satellite within 150 km along the arc; '+man+' manoeuvres detected. '
+    + 'The dashed line is the date shown on the ring.';
+}
+function lonReadDefault(){
+  const o = OBJ[S.insp], close = ENC.filter(e => e.chaser===o.id && e.median<=100);
+  setReadout($("#lonRead"), [["Parking slots", String(o.slots.length)], ["Encounters < 100 km", String(close.length), C.base],
+    ["Manoeuvres", String((o.manoeuvres||[]).length), C.solar]]);
+}
+function slotTip(o, s){
+  const enc = s.near.map(n => ({n, e:encFor(o.id, n.id, s.k)}));
+  return '<div class="t">'+lonStr(s.lon,2)+' · '+fmtDay(s.d0)+' – '+fmtDay(s.d1)+'</div>'
+    + '<div class="r">'+Math.round(s.d1-s.d0)+' days parked</div>'
+    + (s.near.length ? enc.slice(0,5).map(({n,e}) => '<div class="r"><span class="sw" style="background:'+(n.arc<=150?C.base:C.line2)+'"></span>'
+        + esc(n.name)+(n.reported?' ✓':'')+'<b>'+(e ? kmStr(e.median)+' median' : kmStr(n.arc)+' arc')+'</b></div>').join("")
+      : '<div class="r">no catalogued object within 0.5°</div>')
+    + (s.near.some(n=>n.reported) ? '<div class="n">✓ named as a target in public analyses</div>' : '')
+    + (enc.some(x=>x.e) ? '<div class="n">Click to see the encounter up close</div>' : '');
+}
+function wireLonSlots(){
+  const tip = $("#lonTip"), stage = $("#lonStage"), o = LON.o;
+  lonSvg.querySelectorAll(".slot").forEach(g => {
+    const s = o.slots[+g.dataset.k];
+    const show = ev => { tip.innerHTML = slotTip(o, s); tip.hidden = false;
+      const r = ev && ev.clientX!=null ? {x:ev.clientX, y:ev.clientY} : (() => { const b = g.getBoundingClientRect(); return {x:b.left+b.width/2, y:b.top}; })();
+      placeTip(tip, stage, r.x, r.y); };
+    g.addEventListener("pointermove", show); g.addEventListener("focus", () => show(null));
+    g.addEventListener("pointerleave", () => { tip.hidden = true; }); g.addEventListener("blur", () => { tip.hidden = true; });
+    const open = () => { const best = s.near.map(n => encFor(o.id, n.id, s.k)).filter(Boolean).sort((a,b)=>a.median-b.median)[0];
+      setTime((s.d0+s.d1)/2); stopPlay();
+      if (best){ selectEnc(best.id); $("#closeup").scrollIntoView({behavior: reduceMotion ? "auto" : "smooth"}); } };
+    g.addEventListener("click", open);
+    g.addEventListener("keydown", ev => { if (ev.key==="Enter" || ev.key===" "){ ev.preventDefault(); open(); } });
+  });
+}
+function fillSlotTable(o){
+  $("#slotTable").innerHTML = o.slots.map(s => { const n = s.near[0];
+    return '<tr><td class="l">'+fmtDay(s.d0)+'</td><td class="l">'+fmtDay(s.d1)+'</td><td>'+Math.round(s.d1-s.d0)+'</td><td>'+lonStr(s.lon,2)+'</td>'
+      + '<td class="l name">'+(n ? esc(n.name) : '—')+'</td><td>'+(n ? kmStr(n.arc) : '—')+'</td></tr>'; }).join("");
+}
+
+/* ===================================================================== encounters */
+const rangeSvg = $("#rangeChart"), pathSvg = $("#pathChart");
+let ENCV = null;
+function encSeries(e){
+  const P = e.path, n = P.R.length, t = new Array(n), r = new Array(n);
+  for (let i=0; i<n; i++){ t[i] = P.t0 + i*P.dt_h/24; r[i] = Math.hypot(P.R[i], P.I[i], P.C[i]); }
+  return {t, r, R:P.R, I:P.I, C:P.C, n};
+}
+function encLabel(e){
+  if (e.label) return e.label;
+  return OBJ[e.chaser].name+" and "+e.targetName;
+}
+function buildEncControls(){
+  const groups = INSP.map(o => {
+    const list = ENC.filter(e => e.chaser===o.id).sort((a,b) => a.d0-b.d0);
+    if (!list.length) return "";
+    return '<optgroup label="'+esc(o.name)+'">'+list.map(e => '<option value="'+esc(e.id)+'">'
+      + esc(e.targetName)+' · '+fmtMonth(e.d0)+(Math.round(e.d1-e.d0)>45 ? ' to '+fmtMonth(e.d1) : '')+' · median '+kmStr(e.median)+'</option>').join("")+'</optgroup>';
+  }).join("");
+  $("#encSel").innerHTML = groups;
+  $("#encSel").addEventListener("change", ev => selectEnc(ev.target.value));
+  const picks = [["Intelsat 33E","40258:41748:2021"],["Intelsat 39","55841:44476"],
+                 ["Beidou-2 G2 tow","49330:34779"],["SJ-21 + SJ-25","62485:49330:min"]];
+  $("#pickSeg").innerHTML = picks.map(([lab, key]) => { const e = resolvePick(key);
+    return e ? '<button type="button" data-enc="'+esc(e.id)+'" aria-pressed="false">'+esc(lab)+'</button>' : ''; }).join("");
+  wireSeg($("#pickSeg"), "enc", id => selectEnc(id));
+  wireSeg($("#axisSeg"), "axis", a => { S.axis = a; pressSeg($("#axisSeg"), "axis", a); drawEnc(); });
+}
+function resolvePick(key){
+  const [c, t, how] = key.split(":"); let list = ENC.filter(e => e.chaser===+c && e.target===+t);
+  if (how && /^\d{4}$/.test(how)) list = list.filter(e => toDate(e.d0).getUTCFullYear()===+how);
+  return list.sort((a,b) => a.median-b.median)[0] || null;
+}
+function selectEnc(id){
+  if (!ENC_BY_ID[id]) return;
+  S.enc = id; $("#encSel").value = id; pressSeg($("#pickSeg"), "enc", id); S.hoverEnc = null;
+  drawEnc();
+}
+const median = arr => { const v = arr.slice().sort((a,b) => a-b), n = v.length; return n ? (n%2 ? v[(n-1)/2] : (v[n/2-1]+v[n/2])/2) : 0; };
+function encWhere(e, sr){
+  const s = e.sigma || 1;
+  if (e.median < 2*s) return "co-located: closer than the data resolves";
+  const parts = [];
+  const add = (v, pos, neg) => { if (Math.abs(v) >= Math.max(1, s)) parts.push(kmStr(Math.abs(v))+" "+(v>=0?pos:neg)); };
+  add(median(sr.I), "ahead", "behind"); add(median(sr.R), "above", "below"); add(median(sr.C), "north", "south");
+  return parts.length ? parts.slice(0,2).join(", ") : "around the target";
+}
+function drawEnc(){
+  const e = ENC_BY_ID[S.enc]; if (!e) return;
+  const sr = encSeries(e); ENCV = {e, sr};
+  /* --- distance over time: daily min-max band and daily mean for long encounters,
+         the hourly series with the TLE-uncertainty band for short ones --- */
+  const W0 = rangeSvg.clientWidth || 640, narrow = W0 < 520, H0 = narrow ? 250 : 300;
+  rangeSvg.setAttribute("viewBox", "0 0 "+W0+" "+H0); rangeSvg.setAttribute("height", H0);
+  const M = {l:narrow?50:58, r:10, t:28, b:30}, W = W0-M.l-M.r, H = H0-M.t-M.b;
+  const d0 = sr.t[0], d1 = sr.t[sr.n-1], sig = e.sigma || 0;
+  const dl = e.daily, env = (d1-d0) > 15 && dl && dl.lo.length > 2;
+  const hiVals = env ? dl.hi.filter(v => v!==null) : sr.r, loVals = (env ? dl.lo.filter(v => v!==null) : sr.r).filter(v => v>0);
+  const rmax = Math.max(...hiVals), rmin = loVals.length ? Math.min(...loVals) : 0.01;
+  const log = e.median < 3 || rmax/Math.max(e.median, 0.01) > 30;
+  let Y, yTicks = [];
+  if (log){ const lo = Math.log10(Math.max(0.01, Math.min(rmin, Math.max(0.01, e.median-sig))*0.7)), hi = Math.log10(rmax*1.4);
+    Y = v => M.t + H - (Math.log10(Math.max(v, Math.pow(10,lo)))-lo)/(hi-lo)*H;
+    for (let p = Math.ceil(lo); p<=hi; p++) yTicks.push(Math.pow(10,p)); }
+  else { const hi = Math.max(rmax + (env ? 0 : sig), 10)*1.08; Y = v => M.t + H - clamp(v,0,hi)/hi*H;
+    const st = niceStep(hi, narrow?4:5); for (let v=0; v<=hi; v+=st) yTicks.push(v); }
+  const X = d => M.l + (d-d0)/Math.max(1e-6, d1-d0)*W;
+  let g = "";
+  yTicks.forEach(v => { const y = Y(v).toFixed(1);
+    g += '<line x1="'+M.l+'" y1="'+y+'" x2="'+(M.l+W)+'" y2="'+y+'" stroke="'+C.line+'"/>'
+       + '<text x="'+(M.l-8)+'" y="'+(+y+4)+'" text-anchor="end">'+(v<1 ? String(+v.toFixed(2)) : v.toLocaleString("en-GB"))+'</text>'; });
+  timeTicks(d0, d1, narrow?4:7).forEach(tk => { const x = X(tk.d).toFixed(1);
+    g += '<line x1="'+x+'" y1="'+M.t+'" x2="'+x+'" y2="'+(M.t+H)+'" stroke="'+C.line+'"/>'
+       + '<text x="'+x+'" y="'+(M.t+H+19)+'" text-anchor="middle">'+tk.lab+'</text>'; });
+  let band = "", line = "";
+  const floor = log ? 0.01 : 0;
+  if (env){
+    /* one polygon per run of consecutive days with data */
+    let run = [];
+    const flush = () => { if (run.length > 1){
+        let up = "", dn = "";
+        run.forEach((i,k) => { up += (k?"L":"M")+X(dl.d0+i+0.5).toFixed(1)+" "+Y(dl.hi[i]).toFixed(1); });
+        for (let k=run.length-1; k>=0; k--){ const i = run[k]; dn += "L"+X(dl.d0+i+0.5).toFixed(1)+" "+Y(Math.max(dl.lo[i], floor)).toFixed(1); }
+        band += '<path d="'+up+dn+'Z" fill="'+C.net+'" opacity=".22"/>';
+        line += run.map((i,k) => (k?"L":"M")+X(dl.d0+i+0.5).toFixed(1)+" "+Y(dl.mean[i]).toFixed(1)).join(""); }
+      run = []; };
+    for (let i=0; i<dl.lo.length; i++){ if (dl.lo[i]===null) flush(); else run.push(i); }
+    flush();
+  } else {
+    if (sig > 0){ let up = "", dn = "";
+      for (let i=0; i<sr.n; i++){ up += (i?"L":"M")+X(sr.t[i]).toFixed(1)+" "+Y(sr.r[i]+sig).toFixed(1); }
+      for (let i=sr.n-1; i>=0; i--){ dn += "L"+X(sr.t[i]).toFixed(1)+" "+Y(Math.max(sr.r[i]-sig, floor)).toFixed(1); }
+      band = '<path d="'+up+dn+'Z" fill="'+C.net+'" opacity=".16"/>'; }
+    for (let i=0; i<sr.n; i++) line += (i?"L":"M")+X(sr.t[i]).toFixed(1)+" "+Y(sr.r[i]).toFixed(1);
+  }
+  let ref = "";
+  const y50 = Y(50); if (y50 > M.t+4 && y50 < M.t+H-4)
+    ref = '<line x1="'+M.l+'" y1="'+y50.toFixed(1)+'" x2="'+(M.l+W)+'" y2="'+y50.toFixed(1)+'" stroke="'+C.mid+'" stroke-dasharray="4 4" opacity=".55"/>'
+        + '<text x="'+(M.l+W-4)+'" y="'+(y50-6).toFixed(1)+'" text-anchor="end" style="fill:'+C.mid+';paint-order:stroke;stroke:'+C.panel+';stroke-width:4px">50 km</text>';
+  rangeSvg.innerHTML = g + band + ref + '<path d="'+line+'" fill="none" stroke="'+C.net+'" stroke-width="1.6" stroke-linejoin="round"/>'
+    + '<text class="tl" x="'+M.l+'" y="14">'+(env ? 'Distance [km]: daily range and mean' : 'Distance [km], hourly, with the TLE uncertainty')+(log?' · log scale':'')+'</text>'
+    + '<line id="rCur" x1="0" y1="'+M.t+'" x2="0" y2="'+(M.t+H)+'" stroke="'+C.solar+'" opacity="0"/>'
+    + '<circle id="rDot" r="4" fill="'+C.ink+'" stroke="'+C.panel+'" stroke-width="2" opacity="0"/>'
+    + '<rect id="rHit" x="'+M.l+'" y="'+M.t+'" width="'+W+'" height="'+H+'" fill="transparent" style="cursor:crosshair"/>';
+  ENCV.X = X; ENCV.Y = Y; ENCV.M = M; ENCV.W = W;
+
+  /* --- around the target --- */
+  const P0 = pathSvg.clientWidth || 380, Hp = Math.round(clamp(P0*0.86, 240, 330));
+  pathSvg.setAttribute("viewBox", "0 0 "+P0+" "+Hp); pathSvg.setAttribute("height", Hp);
+  const N = {l:narrow?46:52, r:12, t:16, b:40}, Wp = P0-N.l-N.r, Hq = Hp-N.t-N.b;
+  const V = S.axis==="R" ? sr.R : sr.C;
+  /* frame: the whole path, or only its closer half when an approach from far away would
+     shrink the encounter itself to a dot */
+  const order = sr.r.map((_, i) => i).sort((a,b) => sr.r[a]-sr.r[b]);
+  const robust = Math.max(...sr.r)/Math.max(e.median, 1e-3) > 6;
+  const use = robust ? order.slice(0, Math.max(10, Math.ceil(order.length/2))) : order;
+  const lim = arr => { let m = 0; for (const i of use) m = Math.max(m, Math.abs(arr[i])); return Math.max(m*(robust?1.3:1.12), sig*1.5, 0.05); };
+  const xl = lim(sr.I), yl = lim(V);
+  const PX = v => N.l + (v+xl)/(2*xl)*Wp, PY = v => N.t + Hq - (v+yl)/(2*yl)*Hq;
+  let q = "";
+  const xs = niceStep(2*xl, narrow?4:5), ys = niceStep(2*yl, 5);
+  for (let v = Math.ceil(-xl/xs)*xs; v<=xl; v+=xs){ const x = PX(v).toFixed(1);
+    q += '<line x1="'+x+'" y1="'+N.t+'" x2="'+x+'" y2="'+(N.t+Hq)+'" stroke="'+(Math.abs(v)<1e-9?C.line2:C.line)+'"/>'
+       + '<text x="'+x+'" y="'+(N.t+Hq+16)+'" text-anchor="middle">'+fmtAxis(v)+'</text>'; }
+  for (let v = Math.ceil(-yl/ys)*ys; v<=yl; v+=ys){ const y = PY(v).toFixed(1);
+    q += '<line x1="'+N.l+'" y1="'+y+'" x2="'+(N.l+Wp)+'" y2="'+y+'" stroke="'+(Math.abs(v)<1e-9?C.line2:C.line)+'"/>'
+       + '<text x="'+(N.l-7)+'" y="'+(+y+4)+'" text-anchor="end">'+fmtAxis(v)+'</text>'; }
+  let pp = "", outside = 0;
+  const dots = e.path.dt_h >= 6;  /* coarse sampling: a cloud of points reads better than zigzags */
+  for (let i=0; i<sr.n; i++){ const x = PX(sr.I[i]), y = PY(V[i]);
+    if (Math.abs(sr.I[i]) > xl || Math.abs(V[i]) > yl) outside++;
+    pp += dots ? "M"+x.toFixed(1)+" "+y.toFixed(1)+"h0.01" : (i?"L":"M")+x.toFixed(1)+" "+y.toFixed(1); }
+  const sx = PX(0), sy = PY(0);
+  pathSvg.innerHTML = '<defs><clipPath id="pClip"><rect x="'+N.l+'" y="'+N.t+'" width="'+Wp+'" height="'+Hq+'"/></clipPath></defs>' + q
+    + '<g clip-path="url(#pClip)"><path d="'+pp+'" fill="none" stroke="'+C.net+'" stroke-width="'+(dots?2.6:1)+'" stroke-linecap="round" opacity="'+(dots?.3:.22)+'" stroke-linejoin="round"/>'
+    + '<path id="pLoop" fill="none" stroke="'+C.net+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></g>'
+    + (outside ? '<text x="'+(N.l+6)+'" y="'+(N.t+Hq-8)+'">'+Math.round(100*outside/sr.n)+' % of the path lies outside the frame</text>' : '')
+    + '<path d="'+star(sx, sy, 7.5)+'" fill="'+C.base+'" stroke="'+C.panel+'" stroke-width="1.2"/>'
+    + '<text x="'+(sx+10).toFixed(1)+'" y="'+(sy-9).toFixed(1)+'" style="fill:'+C.base+';font-family:var(--display);font-size:12px;font-weight:600">'+esc(e.targetName)+'</text>'
+    + '<circle id="pDot" r="4.5" fill="'+C.net+'" stroke="'+C.panel+'" stroke-width="2"/>'
+    + '<text x="'+(N.l+Wp)+'" y="'+(Hp-4)+'" text-anchor="end">in-track [km], ahead →</text>'
+    + '<text x="'+(N.l+4)+'" y="'+(N.t+10)+'">'+(S.axis==="R" ? "↑ radial [km], up" : "↑ cross-track [km], north")+'</text>';
+  ENCV.PX = PX; ENCV.PY = PY; ENCV.V = V;
+  const iMin = sr.r.indexOf(Math.min(...sr.r));
+  setEncCursor(S.hoverEnc!=null ? S.hoverEnc : iMin, false);
+  wireEncHover();
+
+  setReadout($("#encRead"), [
+    ["Median distance", kmStr(e.median), C.net],
+    ["Closest", kmStr(e.min), null, fmtDay(e.dMin)],
+    ["Within 50 km", Math.round(e.days50)+" days", null, "of "+Math.round(e.d1-e.d0)],
+    ["Typical position", encWhere(e, sr)],
+    ["TLE uncertainty", e.sigma!=null ? "±"+kmStr(e.sigma) : "—"]
+  ]);
+  $("#encCaption").innerHTML = encCaption(e);
+}
+function fmtAxis(v){ const a = Math.abs(v); return (v<0?"−":"")+(a>=10 ? Math.round(a) : a>=1 ? +a.toFixed(1) : +a.toFixed(2)); }
+function star(x, y, r){ let d = ""; for (let k=0; k<10; k++){ const a = -Math.PI/2 + k*Math.PI/5, rr = k%2 ? r*0.45 : r;
+  d += (k?"L":"M")+(x+rr*Math.cos(a)).toFixed(1)+" "+(y+rr*Math.sin(a)).toFixed(1); } return d+"Z"; }
+function setEncCursor(i, fromHover){
+  if (!ENCV) return; const {sr, X, Y, M, PX, PY, V} = ENCV; i = clamp(i, 0, sr.n-1);
+  const x = X(sr.t[i]), y = Y(sr.r[i]);
+  const cur = document.getElementById("rCur"), dot = document.getElementById("rDot"), p = document.getElementById("pDot");
+  cur.setAttribute("x1", x); cur.setAttribute("x2", x); cur.setAttribute("opacity", .7);
+  dot.setAttribute("cx", x); dot.setAttribute("cy", y); dot.setAttribute("opacity", 1);
+  p.setAttribute("cx", PX(sr.I[i])); p.setAttribute("cy", PY(V[i]));
+  /* the day around the cursor: one loop of the daily relative-motion cycle */
+  const half = Math.max(1, Math.round(12/ENCV.e.path.dt_h)), a = Math.max(0, i-half), b = Math.min(sr.n-1, i+half);
+  let d = ""; if (ENCV.e.path.dt_h <= 4) for (let k=a; k<=b; k++) d += (k>a?"L":"M")+PX(sr.I[k]).toFixed(1)+" "+PY(V[k]).toFixed(1);
+  document.getElementById("pLoop").setAttribute("d", d);
+  if (fromHover) S.hoverEnc = i;
+}
+function wireEncHover(){
+  const hit = document.getElementById("rHit"), tip = $("#encTip"), stage = $("#encStage");
+  const move = ev => { const {sr, X, M, W} = ENCV, r = rangeSvg.getBoundingClientRect();
+    const sx = (ev.clientX - r.left) * (rangeSvg.viewBox.baseVal.width / r.width);
+    const d = sr.t[0] + (sx - M.l)/W*(sr.t[sr.n-1]-sr.t[0]);
+    let i = Math.round((d - sr.t[0])/(sr.t[1]-sr.t[0] || 1)); i = clamp(i, 0, sr.n-1);
+    setEncCursor(i, true);
+    const t = toDate(sr.t[i]);
+    tip.innerHTML = '<div class="t">'+fmtDay(sr.t[i])+' '+String(t.getUTCHours()).padStart(2,"0")+':00 UTC</div>'
+      + '<div class="r"><span class="sw" style="background:'+C.net+'"></span>distance<b>'+kmStr(sr.r[i])+'</b></div>'
+      + '<div class="r">in-track<b>'+fmtSigned(sr.I[i])+'</b></div><div class="r">radial<b>'+fmtSigned(sr.R[i])+'</b></div>'
+      + '<div class="r">cross-track<b>'+fmtSigned(sr.C[i])+'</b></div>';
+    tip.hidden = false; placeTip(tip, stage, ev.clientX, ev.clientY); };
+  hit.addEventListener("pointermove", move);
+  hit.addEventListener("pointerleave", () => { tip.hidden = true; });
+}
+const fmtSigned = v => Math.abs(v) < 0.01 ? "0" : (v<0?"−":"+")+kmStr(Math.abs(v));
+function encCaption(e){
+  const c = OBJ[e.chaser].name, days = Math.round(e.d1-e.d0);
+  let s = '<b>'+esc(c)+' and '+esc(e.targetName)+'</b>, '+fmtDay(e.d0)+' to '+fmtDay(e.d1)+' ('+days+' days). ';
+  if (e.target===34779) s += 'SJ-21 closes in from thousands of kilometres and from 30 December stays within a few kilometres of the dead satellite. The excursion of up to 2,000 km between 11 and 21 January is where the two catalogue entries disagree. ';
+  else if (e.median < 1) s += 'The two are tracked as one object: distances are far below the TLE uncertainty, consistent with docking. ';
+  else s += 'Median distance '+kmStr(e.median)+', closest '+kmStr(e.min)+' on '+fmtDay(e.dMin)+'. '+(e.reported ? 'This target is named in public analyses. ' : '');
+  return s + 'Right: the inspector\'s path with the target fixed at the star'+(e.path.dt_h<=4 ? '; the bright loop is the 24 hours around the cursor' : '')+'. The two axes are scaled independently.';
+}
+
+/* ===================================================================== validation */
+const valSvg = $("#valChart");
+let VALV = null;
+function buildVal(){
+  const V = D.validation;
+  $("#valSeg").innerHTML = V.satellites.map(s => '<button type="button" data-sat="'+esc(s.name)+'" aria-pressed="'+(s.name===S.val)+'">'+esc(s.name.replace("Fengyun-","FY-"))+'</button>').join("");
+  wireSeg($("#valSeg"), "sat", n => { S.val = n; pressSeg($("#valSeg"), "sat", n); drawVal(); });
+  const pct = v => (v*100).toFixed(0)+" %";
+  $("#valTable").innerHTML = V.summary.map(r => '<tr'+(r.name==="TOTAL"?' class="total"':'')+'><td class="l name">'+(r.name==="TOTAL"?"All five":esc(r.name))+'</td><td>'+r.truth+'</td><td>'+r.found+'</td><td>'+r.fp+'</td><td>'+pct(r.precision)+'</td><td>'+pct(r.recall)+'</td><td>'+r.f1.toFixed(2)+'</td><td>'+r.lag.toFixed(2)+' d</td></tr>').join("");
+  $("#cmpTable").innerHTML = V.comparison.map(r => '<tr><td class="l name">'+esc(r.detector.replace(/^2a /,"").replace(/^2b /,""))+'</td><td>'+r.found+'</td><td>'+r.fp+'</td><td>'+pct(r.precision)+'</td><td>'+pct(r.recall)+'</td><td>'+r.f1.toFixed(2)+'</td><td>'+r.lag.toFixed(2)+' d</td></tr>').join("");
+}
+function drawVal(){
+  const sat = D.validation.satellites.find(s => s.name===S.val); if (!sat) return;
+  const sum = D.validation.summary.find(s => s.name===S.val);
+  const W0 = valSvg.clientWidth || 900, narrow = W0 < 560, H0 = narrow ? 280 : 330;
+  valSvg.setAttribute("viewBox", "0 0 "+W0+" "+H0); valSvg.setAttribute("height", H0);
+  const M = {l:narrow?50:58, r:12, t:58, b:30}, W = W0-M.l-M.r, H = H0-M.t-M.b;
+  const dr = sat.drift, d0 = dr.d0, d1 = dr.d0 + dr.v.length - 1;
+  const vals = dr.v.filter(v => v!==null).sort((a,b)=>a-b);
+  const q = p => vals[clamp(Math.floor(p*vals.length), 0, vals.length-1)];
+  let lo = q(0.01), hi = q(0.99); const pad = Math.max(0.01, (hi-lo)*0.12); lo -= pad; hi += pad;
+  const X = d => M.l + (d-d0)/(d1-d0)*W, Y = v => M.t + (hi-clamp(v,lo,hi))/(hi-lo)*H;
+  let g = '';
+  const st = niceStep(hi-lo, 5);
+  for (let v = Math.ceil(lo/st)*st; v<=hi; v+=st){ const y = Y(v).toFixed(1);
+    g += '<line x1="'+M.l+'" y1="'+y+'" x2="'+(M.l+W)+'" y2="'+y+'" stroke="'+(Math.abs(v)<1e-9?C.line2:C.line)+'"/>'
+       + '<text x="'+(M.l-8)+'" y="'+(+y+4)+'" text-anchor="end">'+(+v.toFixed(3))+'</text>'; }
+  timeTicks(d0, d1, narrow?4:9).forEach(tk => { const x = X(tk.d).toFixed(1);
+    g += '<line x1="'+x+'" y1="'+(M.t-40)+'" x2="'+x+'" y2="'+(M.t+H)+'" stroke="'+C.line+'"/>'
+       + '<text x="'+x+'" y="'+(M.t+H+19)+'" text-anchor="middle">'+tk.lab+'</text>'; });
+  let path = "", lastI = -99;
+  dr.v.forEach((v,i) => { if (v===null) return; path += (i-lastI<=4?"L":"M")+X(d0+i).toFixed(1)+" "+Y(v).toFixed(1); lastI = i; });
+  let marks = "";
+  const yT = M.t-44, yD = M.t-22;
+  sat.truth.forEach(t => { const x = X(t.d);
+    marks += t.found ? '<rect x="'+(x-1.5).toFixed(1)+'" y="'+yT+'" width="3" height="13" fill="'+C.real+'"/>'
+                     : '<rect x="'+(x-2).toFixed(1)+'" y="'+(yT+0.5)+'" width="4" height="12" fill="none" stroke="'+C.real+'"/>'; });
+  sat.detections.forEach(d => { const x = X(d.d);
+    marks += d.ok ? '<path d="M'+(x-4).toFixed(1)+' '+yD+'h8l-4 8z" fill="'+C.solar+'"/>'
+                  : '<path d="M'+(x-3.6).toFixed(1)+' '+(yD+0.5)+'h7.2l-3.6 7z" fill="none" stroke="'+C.solar+'"/>'; });
+  valSvg.innerHTML = g + '<path d="'+path+'" fill="none" stroke="'+C.mid+'" stroke-width="1.2" stroke-linejoin="round"/>' + marks
+    + '<text class="tl" x="'+M.l+'" y="'+(M.t-48)+'" text-anchor="end" dx="-8" style="font-size:10.5px;fill:'+C.dim+'">logged</text>'
+    + '<text class="tl" x="'+M.l+'" y="'+(M.t-14)+'" text-anchor="end" dx="-8" style="font-size:10.5px;fill:'+C.dim+'">detected</text>'
+    + '<text class="tl" x="'+(M.l+W)+'" y="'+(M.t+12)+'" text-anchor="end">Drift rate [°/day]</text>'
+    + '<rect id="vHit" x="'+M.l+'" y="'+(M.t-48)+'" width="'+W+'" height="'+(H+48)+'" fill="transparent"/>';
+  VALV = {X, M, W, sat, d0, d1};
+  wireValHover();
+  if (sum) setReadout($("#valRead"), [["Logged", String(sum.truth), C.real], ["Found", String(sum.found), C.solar],
+    ["Not in log", String(sum.fp)], ["Recall", (sum.recall*100).toFixed(0)+" %"], ["Median lag", sum.lag.toFixed(1)+" days"]]);
+}
+function wireValHover(){
+  const hit = document.getElementById("vHit"), tip = $("#valTip"), stage = $("#valStage");
+  hit.addEventListener("pointermove", ev => {
+    const {X, sat, M, W} = VALV, r = valSvg.getBoundingClientRect();
+    const sx = (ev.clientX - r.left) * (valSvg.viewBox.baseVal.width / r.width);
+    const items = sat.truth.map(t => ({d:t.d, kind:"t", t})).concat(sat.detections.map(d => ({d:d.d, kind:"d", det:d})));
+    let best = null, bd = 9;
+    items.forEach(it => { const dx = Math.abs(X(it.d) - sx); if (dx < bd){ bd = dx; best = it; } });
+    if (!best){ tip.hidden = true; return; }
+    const near = items.filter(it => Math.abs(it.d - best.d) < 6).sort((a,b) => a.d-b.d);
+    tip.innerHTML = near.map(it => it.kind==="t"
+      ? '<div class="r"><span class="sw" style="background:'+C.real+'"></span>logged '+fmtDay(it.d)+'<b>'+(it.t.found?"found":"missed")+'</b></div>'
+      : '<div class="r"><span class="sw" style="background:'+C.solar+'"></span>detected '+fmtDay(it.d)+'<b>'+(it.det.ok?"match":"not in log")+'</b></div>'
+        + '<div class="n" style="margin:0 0 4px 17px">'+kindStr(manCode(it.det.k))+', Δv '+it.det.dv.toFixed(2)+' m/s</div>').join("");
+    tip.hidden = false; placeTip(tip, stage, ev.clientX, ev.clientY);
+  });
+  hit.addEventListener("pointerleave", () => { tip.hidden = true; });
+}
+function manCode(k){ const map = {"E-W station-keeping":"sk","drift start":"start","drift stop":"stop","drift change":"drift","N-S (inclination)":"ns"};
+  const [b, x] = String(k).split(" + "); return (map[b]||"other")+(x?"+ns":""); }
+
+/* ===================================================================== wiring */
+function buildInspSegs(){
+  const html = INSP.map(o => '<button type="button" data-insp="'+o.id+'" aria-pressed="'+(o.id===S.insp)+'">'+esc(o.name)+'</button>').join("");
+  document.querySelectorAll(".inspSeg").forEach(seg => { seg.innerHTML = html;
+    wireSeg(seg, "insp", id => { stopPlay(); selectInsp(id); }); });
+}
+function wireReplays(){
+  document.addEventListener("click", ev => {
+    const b = ev.target.closest("[data-replay],[data-open]"); if (!b) return;
+    if (b.dataset.open){ const e = resolvePick(b.dataset.open); if (e){ selectEnc(e.id);
+      $("#closeup").scrollIntoView({behavior: reduceMotion ? "auto" : "smooth"}); } return; }
+    const id = +b.dataset.replay, at = b.dataset.at ? dayOf(b.dataset.at) : null;
+    stopPlay(); selectInsp(id, {at: at!=null ? at : trackStart(OBJ[id])});
+    window.scrollTo({top:0, behavior: reduceMotion ? "auto" : "smooth"});
+    if (at==null && !reduceMotion) setTimeout(() => play(), 450);
+  });
+}
+function init(data, encounters){
+  D = data; ENC = encounters;
+  D.objects.forEach(o => { OBJ[o.id] = o; });
+  INSP = D.objects.filter(o => o.role==="inspector");
+  ENC.forEach(e => { ENC_BY_ID[e.id] = e; });
+  fillFacts();
+  T0 = Math.min(...INSP.map(trackStart)); T1 = Math.max(D.dataUntil, ...INSP.map(trackEnd));
+  slider.min = Math.floor(T0); slider.max = Math.ceil(T1);
+  slider.addEventListener("input", () => { stopPlay(); setTime(+slider.value, true); });
+  $("#playBtn").addEventListener("click", () => { S.playing ? stopPlay() : play(); });
+  buildInspSegs(); buildRingStatic(); buildNow(); buildEncControls(); buildVal(); wireReplays();
+  drawLon();
+  selectEnc(resolvePick("40258:41748:2021") ? resolvePick("40258:41748:2021").id : ENC[0].id);
+  drawVal();
+  /* the opening: Luch/Olymp-K's decade on the belt, played once */
+  const luch = OBJ[S.insp];
+  if (reduceMotion){ setTime(dayOf("2021-11-20")); }
+  else { setTime(trackStart(luch)); setTimeout(() => { if (S.t===trackStart(luch)) play(); }, 700); }
+  let rt = 0;
+  addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { drawLon(); drawEnc(); drawVal(); }, 120); });
+}
+function loadError(){
+  const msg = '<p class="loadErr">The interactive charts read their data from <code>data/*.json</code>. If you opened this file directly, serve the folder instead: <code>python -m http.server -d docs</code>, then open <code>http://localhost:8000</code>.</p>';
+  ["#lonStage","#encStage","#valStage"].forEach(s => { $(s).innerHTML = msg; });
+  $("#ringRead").innerHTML = msg;
+}
+Promise.all([fetch("data/geowatch.json").then(r => { if (!r.ok) throw r; return r.json(); }),
+             fetch("data/encounters.json").then(r => { if (!r.ok) throw r; return r.json(); })])
+  .then(([d, e]) => init(d, e.encounters))
+  .catch(err => { console.error(err); loadError(); });
+})();
+</script>
+</body>
+</html>

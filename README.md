@@ -4,6 +4,10 @@
 
 **Detecting manoeuvres and proximity operations of geostationary satellites from public orbital data.**
 
+**Website: [eduacu2001.github.io/geo-watch](https://eduacu2001.github.io/geo-watch/)** - replay twelve
+years of inspector satellites on the GEO belt, explore every close approach in the target's
+frame, and check the manoeuvre detector against ground truth.
+
 Some satellites in geostationary orbit do more than relay TV: Russia's Luch/Olymp spacecraft
 have spent a decade parking next to Western communications satellites, and China's SJ-21 towed
 a dead Beidou satellite out of the GEO belt before docking with SJ-25 in 2025. This project
@@ -11,14 +15,15 @@ reconstructs that activity from the public TLE catalogue: it detects when a sate
 manoeuvres, estimates the Δv, and flags close approaches between objects - and it measures how
 reliable those detections are against satellites whose real manoeuvre history is known.
 
-> Status: **phases 1-3 done** - next: case studies and the interactive website
+> Status: **phases 1-4 and the website done** - next: daily automatic refresh of the website data
 
 ## What public data already shows
 
 **SJ-21 meets SJ-25 (2025).** SJ-21 spends the first five months of 2025 drifting west from
 149°E, then hops to 127.5°E in early June; SJ-25 moves there from 120°E a few days later. In
-mid-August the inclination of both objects drops from 10.6° to 4.4° within a week - a plane
-change of about 6°, of the order of 300 m/s, made while the two were reported to be docked.
+mid-August the inclination of both objects drops from 10.6° to 4.4° within a week while the
+node moves by 21° - a plane change of 6.6°, about 360 m/s, made while the two were reported to
+be docked.
 
 ![SJ-21 in 2025: longitude, drift rate and inclination with detected manoeuvres](docs/img/sj21_2025.png)
 
@@ -39,8 +44,9 @@ raised about 330 km above GEO, where it now drifts west at 4.2°/day.
 | 2b | Model-based detection: extended Kalman filter on the J22 longitude dynamics + NIS test, compared with 2a on the same benchmark | done |
 | 3a | Parking slots of each inspector and the satellites parked next to it | done |
 | 3b | Distance and relative motion (RIC frame) against each neighbour, with TLE uncertainty | done |
-| 4 | Case studies: Luch/Olymp-K, Luch/Olymp 2, SJ-21 & Beidou-2 G2, SJ-21 & SJ-25 | planned |
-| 5 | Interactive website with daily automatic update (GitHub Actions) | planned |
+| 4 | Case studies: Luch/Olymp-K, Luch/Olymp 2, SJ-21 & Beidou-2 G2, SJ-21 & SJ-25 | done |
+| 5a | Interactive website (`docs/`, GitHub Pages) fed by derived JSON | done |
+| 5b | Daily automatic refresh of the website data (GitHub Actions) | next |
 
 ## Setup (Windows, PowerShell)
 
@@ -72,6 +78,8 @@ python scripts/detect_manoeuvres.py --plot # manoeuvre catalogue for every track
 python scripts/compare_detectors.py        # phase 2a vs phase 2b on the same ground truth
 python scripts/find_neighbours.py --download-targets  # who parked next to whom (phase 3a)
 python scripts/analyse_proximity.py --plot-top 6       # distances and RIC motion (phase 3b)
+python scripts/export_site_data.py         # derived JSON for the website (docs/data/)
+python -m http.server -d docs              # preview the website at http://localhost:8000
 ```
 
 `download_history.py` is incremental: later runs only request element sets newer than those
@@ -195,6 +203,18 @@ next one, is 1-5 km depending on the object; distances below that are not meanin
 
 ![Luch/Olymp-K around Intelsat 33E, October 2021 to January 2022](docs/img/luch_intelsat33e.png)
 
+## The website
+
+`docs/` is a single static page published with GitHub Pages. `scripts/export_site_data.py`
+turns the pipeline's results into two JSON files in `docs/data/`: daily longitude and height of
+each inspector, parking slots and neighbours, detected manoeuvres, the relative motion of every
+encounter with a median distance under 150 km, the detector validation, the GEO belt on the
+latest date and where each inspector is now. Only derived numbers are written - the export
+refuses to save anything that looks like a TLE - so the raw Space-Track data stays local.
+
+The page itself has no dependencies: the charts are hand-written SVG in plain JavaScript, in
+the same visual style as [my MSc thesis site](https://eduacu2001.github.io/).
+
 ## Method notes
 
 - **Mean elements, not osculating states.** Following Shorten et al. (2023), orbit changes are
@@ -220,11 +240,13 @@ src/geowatch/
     detection.py          manoeuvre detection, delta-v and classification (phase 2a)
     kalman.py             Kalman-filter manoeuvre detection (phase 2b)
     proximity.py          parking slots, neighbour search, RIC relative motion (phase 3)
+    webdata.py            derived JSON for the website (no raw data leaves this module)
     ephemeris.py          SGP4 ephemerides from a TLE history and TLE consistency errors
     validation.py         matching detections to ground truth
     plots.py              quick-look figures
 scripts/                  command-line entry points
 tests/                    pytest suite (no network needed)
+docs/                     website (GitHub Pages): index.html, data/*.json, og.png
 docs/img/                 figures used in this README (derived results only)
 data/, figures/           generated locally, not committed
 ```

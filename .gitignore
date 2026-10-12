@@ -1,9 +1,10 @@
 # Credentials - never commit
 .env
 
-# Downloaded and generated data (Space-Track terms restrict redistributing raw data)
-data/
-figures/
+# Downloaded and generated data (Space-Track terms restrict redistributing raw data).
+# Anchored to the project root: docs/data/ holds the derived results the website shows.
+/data/
+/figures/
 
 # Python
 __pycache__/
