@@ -17,7 +17,7 @@ import pandas as pd
 import spacetrack.operators as op
 from spacetrack import SpaceTrackClient
 
-from geowatch.config import GP_HISTORY_DIR, SNAPSHOT_DIR, spacetrack_credentials
+from geowatch.config import GEO_WINDOW_DIR, GP_HISTORY_DIR, SNAPSHOT_DIR, spacetrack_credentials
 
 log = logging.getLogger(__name__)
 
@@ -91,6 +91,40 @@ def download_geo_snapshot(client, directory: Path = SNAPSHOT_DIR, max_age_days: 
     df = _records_to_frame(records)
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"geo_{dt.datetime.now(dt.timezone.utc):%Y%m%d}.parquet"
+    df.to_parquet(path, index=False)
+    return path
+
+
+WINDOW_FIELDS = ["NORAD_CAT_ID", "OBJECT_NAME", "OBJECT_TYPE", "EPOCH", "GP_ID", "TLE_LINE1",
+                 "TLE_LINE2"]  # fmt: skip
+
+
+def window_path(day: dt.date, directory: Path = GEO_WINDOW_DIR) -> Path:
+    return directory / f"geo_{day:%Y%m%d}.parquet"
+
+
+def download_geo_window(
+    client, day: dt.date, half_width_days: int = 2, directory: Path = GEO_WINDOW_DIR
+) -> Path:
+    """Every element set in the GEO regime within +-half_width_days of ``day`` (cached).
+
+    Used to see which objects were near an inspector on a given date. Only the fields needed
+    to rebuild the TLEs are requested, which keeps each query to about a megabyte.
+    """
+    path = window_path(day, directory)
+    if path.exists():
+        return path
+    start = dt.datetime.combine(day, dt.time()) - dt.timedelta(days=half_width_days)
+    end = dt.datetime.combine(day, dt.time()) + dt.timedelta(days=half_width_days + 1)
+    records = client.gp_history(
+        epoch=op.inclusive_range(start, end),
+        mean_motion=op.inclusive_range(0.99, 1.01),
+        eccentricity=op.less_than(0.01),
+        predicates=WINDOW_FIELDS,
+        orderby="norad_cat_id",
+    )
+    df = _records_to_frame(records) if records else pd.DataFrame(columns=WINDOW_FIELDS)
+    directory.mkdir(parents=True, exist_ok=True)
     df.to_parquet(path, index=False)
     return path
 

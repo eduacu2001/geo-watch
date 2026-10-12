@@ -110,3 +110,45 @@ def quicklook(
         )
     axes[-1].set_xlabel("Epoch (UTC)", color=TEXT_SECONDARY)
     return fig
+
+
+def relative_motion_figure(rel: pd.DataFrame, title: str, sigma_km: float = np.nan) -> plt.Figure:
+    """Range over time, and the chaser's path around the target in the target's RIC frame."""
+    fig = plt.figure(figsize=(11, 7.5), facecolor=SURFACE, layout="constrained")
+    grid = fig.add_gridspec(2, 2, height_ratios=[1, 1.2])
+    ax_range = fig.add_subplot(grid[0, :])
+    ax_ir = fig.add_subplot(grid[1, 0])
+    ax_ic = fig.add_subplot(grid[1, 1])
+
+    ax_range.plot(rel["time"], rel["range_km"], color=SERIES, lw=1.2)
+    if np.isfinite(sigma_km):
+        ax_range.fill_between(
+            rel["time"],
+            (rel["range_km"] - sigma_km).clip(lower=0),
+            rel["range_km"] + sigma_km,
+            color=SERIES,
+            alpha=0.15,
+            lw=0,
+        )
+    ax_range.set_ylabel("Distance [km]", color=TEXT_SECONDARY)
+    ax_range.set_ylim(bottom=0)
+
+    for ax, column, label in ((ax_ir, "R_km", "Radial [km]"), (ax_ic, "C_km", "Cross-track [km]")):
+        ax.plot(rel["I_km"], rel[column], color=SERIES, lw=0.6, alpha=0.6)
+        ax.plot([0], [0], marker="*", ms=12, color=TEXT, linestyle="none")
+        ax.annotate("target", (0, 0), textcoords="offset points", xytext=(6, 6), color=TEXT,
+                    fontsize=9)  # fmt: skip
+        ax.set_xlabel("In-track [km]  (positive = ahead of the target)", color=TEXT_SECONDARY)
+        ax.set_ylabel(label, color=TEXT_SECONDARY)
+
+    for ax in (ax_range, ax_ir, ax_ic):
+        ax.set_facecolor(SURFACE)
+        ax.grid(True, color=GRID, lw=0.6)
+        ax.tick_params(colors=TEXT_SECONDARY, labelsize=9)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        for side in ("left", "bottom"):
+            ax.spines[side].set_color(GRID)
+    subtitle = f"  (band: TLE uncertainty ±{sigma_km:.1f} km)" if np.isfinite(sigma_km) else ""
+    ax_range.set_title(title + subtitle, loc="left", color=TEXT, fontsize=12)
+    return fig
