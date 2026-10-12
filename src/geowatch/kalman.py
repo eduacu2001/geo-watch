@@ -65,70 +65,77 @@ class KalmanConfig:
 
 
 # --------------------------------------------------------------------------------------
-# Filter building blocks - the five functions marked TODO are yours to write.
-# Work through them in order and run `pytest tests/test_kalman.py -v` after each one.
+# Filter building blocks
 # --------------------------------------------------------------------------------------
 
 
 def longitude_acceleration(lon_deg):
-    """J22 longitude acceleration [deg/day^2].
+    """J22 longitude acceleration a(lon) = -K sin(2 (lon - LON_STABLE)) [deg/day^2].
 
-        a(lon) = -K sin(2 (lon - LON_STABLE))
-
-    with K = K_J22_DEG_DAY2 and LON_STABLE = LON_STABLE_DEG. It must work for a single float
-    and for a numpy array of longitudes. Careful: numpy's sin works in radians.
-
-    Tests: zero at the four equilibrium points; negative at 112°E (pushed west, towards
-    75°E); magnitude K at 45° from a stable point.
+    Works for a float or a numpy array of longitudes in degrees.
     """
-    # TODO(Eduardo) - step 1
-    raise NotImplementedError("Phase 2b step 1: longitude_acceleration (see its docstring)")
+    # np.sin works in radians
+    arg = 2.0 * np.deg2rad(lon_deg - LON_STABLE_DEG)
+    return -K_J22_DEG_DAY2 * np.sin(arg)
 
 
 def longitude_acceleration_gradient(lon_deg):
-    """Derivative d a / d lon [1/day^2], needed for the EKF Jacobian.
+    """Derivative d a / d lon [1/day^2], used in the EKF Jacobian.
 
-    Differentiate a(lon) with respect to lon *in degrees*. The sine's argument is
-    2 (lon - LON_STABLE) degrees = 2 (lon - LON_STABLE) pi/180 radians, so the chain rule
-    brings a factor 2 pi/180.
-
-    Tests: compared with a finite-difference derivative of your longitude_acceleration.
+    The sine's argument is in degrees, so the chain rule brings a factor 2 pi/180.
     """
-    # TODO(Eduardo) - step 2
-    raise NotImplementedError("Phase 2b step 2: longitude_acceleration_gradient")
+    arg = 2.0 * np.deg2rad(lon_deg - LON_STABLE_DEG)
+    factor = 2.0 * np.pi / 180.0
+    return -K_J22_DEG_DAY2 * np.cos(arg) * factor
 
 
 def ew_predict(x, P, dt, cfg: KalmanConfig):
-    """EKF prediction: propagate the E-W state x = [lon, drift, bias] and P by dt days.
+    """EKF prediction of the E-W state x = [lon, drift, bias] and its covariance over dt days.
 
-    Dynamics:   lon' = drift,   drift' = a(lon) + bias,   bias' = 0
-
-    TLE gaps reach 17 days and a(lon) is non-linear, so split dt into
-    n = ceil(dt / cfg.max_step_days) equal sub-steps of h = dt / n days. In each sub-step:
-
-    1. State (second-order Taylor step), with acc = a(lon) + bias:
-           lon   <- lon + drift h + acc h^2 / 2
-           drift <- drift + acc h
-           bias  <- bias
-    2. Jacobian F of that step: F[i, j] = d(new x_i) / d(old x_j), a 3x3 matrix.
-       Derive it yourself from step 1 - this is the "extended" part of the EKF. You need
-       g = longitude_acceleration_gradient(lon) for the terms that depend on lon.
-    3. Covariance:  P <- F P F^T + Q, with the white-noise-acceleration process noise
-           Q = [[q h^3/3, q h^2/2, 0         ],
-                [q h^2/2, q h,     0         ],
-                [0,       0,       q_bias h  ]]
-       where q = cfg.q_drift and q_bias = cfg.q_bias (ns_predict below builds the same
-       2x2 block for the inclination vector).
-
-    At the end wrap lon to [-180, 180) with wrap180. Return (x, P) as new arrays; do not
-    modify the arrays passed in.
-
-    Tests: the state matches a fine RK4 integration for dt = 0.5, 3 and 17 days; with
-    q = 0 the covariance must equal F P F^T for a *numerical* Jacobian (so a wrong F fails);
-    P stays symmetric and grows with process noise; longitude wraps at 180°.
+    Dynamics: lon' = drift, drift' = a(lon) + bias, bias' = 0. Integrated in sub-steps of at
+    most cfg.max_step_days (TLE gaps reach 17 days) with a second-order Taylor step; the
+    covariance is propagated with the Jacobian of that step plus white-noise-acceleration
+    process noise. Returns new arrays and leaves the inputs untouched.
     """
-    # TODO(Eduardo) - step 3
-    raise NotImplementedError("Phase 2b step 3: ew_predict")
+    x = np.array(x, dtype=float, copy=True)
+    P = np.array(P, dtype=float, copy=True)
+
+    n = max(1, int(np.ceil(dt / cfg.max_step_days)))
+    h = dt / n
+    q = cfg.q_drift
+    q_bias = cfg.q_bias
+
+    for _ in range(n):
+        lon, drift, bias = x
+        acc = longitude_acceleration(lon) + bias
+        g = longitude_acceleration_gradient(lon)
+
+        # 1. State: second-order Taylor step
+        lon_new = lon + drift * h + acc * h * h / 2.0
+        drift_new = drift + acc * h
+        x = np.array([lon_new, drift_new, bias])
+
+        # 2. Jacobian of the step, F[i, j] = d(new x_i) / d(old x_j)
+        F = np.array(
+            [
+                [1.0 + g * h * h / 2.0, h, h * h / 2.0],
+                [g * h, 1.0, h],
+                [0.0, 0.0, 1.0],
+            ]
+        )
+
+        # 3. Covariance with white-noise-acceleration process noise
+        Q = np.array(
+            [
+                [q * h**3 / 3.0, q * h**2 / 2.0, 0.0],
+                [q * h**2 / 2.0, q * h, 0.0],
+                [0.0, 0.0, q_bias * h],
+            ]
+        )
+        P = F @ P @ F.T + Q
+
+    x[0] = wrap180(x[0])
+    return x, P
 
 
 def ns_predict(x, P, dt, cfg: KalmanConfig):
@@ -144,36 +151,36 @@ def ns_predict(x, P, dt, cfg: KalmanConfig):
 
 
 def kf_update(x, P, nu, H, R):
-    """Kalman measurement update. The caller passes the innovation nu = z - H x (it has to
-    wrap the longitude difference, which is why nu is computed outside).
+    """Kalman measurement update with a precomputed innovation nu = z - H x.
 
-        S = H P H^T + R                              innovation covariance
-        K = P H^T S^-1                               Kalman gain
-        x <- x + K nu
-        P <- (I - K H) P (I - K H)^T + K R K^T       Joseph form
-
-    The Joseph form equals (I - K H) P in exact arithmetic, but stays symmetric and positive
-    definite with rounding errors. Return (x, P) as new arrays.
-
-    Tests: a scalar case you can check by hand (prior 0 +- 2, measurement 5 +- 1 -> estimate
-    4, variance 0.8); P stays symmetric and never grows.
+    The caller computes nu because the longitude difference has to be wrapped. The
+    covariance uses the Joseph form, which stays symmetric and positive definite with
+    rounding errors. Returns new arrays.
     """
-    # TODO(Eduardo) - step 4
-    raise NotImplementedError("Phase 2b step 4: kf_update")
+    x = np.array(x, dtype=float, copy=True)
+    P = np.array(P, dtype=float, copy=True)
+    H = np.asarray(H, dtype=float)
+    R = np.asarray(R, dtype=float)
+    nu = np.asarray(nu, dtype=float)
+
+    S = H @ P @ H.T + R
+    # K = P H^T S^-1, solved as S^T K^T = (P H^T)^T instead of inverting S
+    K = np.linalg.solve(S.T, (P @ H.T).T).T
+
+    x = x + K @ nu
+    i_kh = np.eye(P.shape[0]) - K @ H
+    P = i_kh @ P @ i_kh.T + K @ R @ K.T
+    return x, P
 
 
 def nis(nu, S) -> float:
-    """Normalised innovation squared, nu^T S^-1 nu, as a float.
+    """Normalised innovation squared nu^T S^-1 nu.
 
-    When the filter model is right it follows a chi-square distribution with len(nu)
-    degrees of freedom; the detector flags values above cfg.gate (27.63 is the 2-dof value
-    with a false-alarm probability of 1e-6). Tip: np.linalg.solve(S, nu) is more accurate
-    than inverting S.
-
-    Tests: two hand-checkable cases, one with a non-diagonal S.
+    Chi-square distributed with len(nu) degrees of freedom when the filter model is right.
     """
-    # TODO(Eduardo) - step 5
-    raise NotImplementedError("Phase 2b step 5: nis")
+    nu = np.asarray(nu, dtype=float)
+    S = np.asarray(S, dtype=float)
+    return float(nu @ np.linalg.solve(S, nu))
 
 
 # --------------------------------------------------------------------------------------
